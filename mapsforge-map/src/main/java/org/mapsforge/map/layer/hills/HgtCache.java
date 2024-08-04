@@ -292,7 +292,7 @@ class HgtCache {
     }
 
 
-    class HgtFileInfo extends BoundingBox implements ShadingAlgorithm.RawHillTileSource {
+    public class HgtFileInfo extends BoundingBox implements ShadingAlgorithm.RawHillTileSource {
         final DemFile file;
         WeakReference<Future<HillshadingBitmap>> weakRef = null;
 
