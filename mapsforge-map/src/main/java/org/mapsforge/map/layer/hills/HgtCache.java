@@ -34,7 +34,7 @@ import java.util.zip.ZipInputStream;
 /**
  * immutably configured, does the work for {@link MemoryCachingHgtReaderTileSource}
  */
-class HgtCache {
+public class HgtCache {
     private static final Logger LOGGER = Logger.getLogger(HgtCache.class.getName());
 
     final DemFolder demFolder;
