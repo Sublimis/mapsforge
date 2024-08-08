@@ -110,4 +110,15 @@ public class DemFileFS implements DemFile {
             IOUtils.closeQuietly(stream);
         }
     }
+
+    public InputStream asInputStream() throws IOException {
+        FileInputStream stream = null;
+        try {
+                FileInputStream fileInputStream = new FileInputStream(file);
+                return fileInputStream;
+        } finally {
+            IOUtils.closeQuietly(channel);
+            IOUtils.closeQuietly(stream);
+        }
+    }
 }
