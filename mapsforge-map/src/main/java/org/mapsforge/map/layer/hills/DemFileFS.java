@@ -112,11 +112,6 @@ public class DemFileFS implements DemFile {
     }
 
     public InputStream asInputStream() throws IOException {
-        FileInputStream stream = null;
-        try {
-                FileInputStream fileInputStream = new FileInputStream(file);
-                return fileInputStream;
-        } finally {
-        }
+        return openInputStream();
     }
 }
