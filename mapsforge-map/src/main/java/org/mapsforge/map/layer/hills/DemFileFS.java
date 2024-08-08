@@ -117,8 +117,6 @@ public class DemFileFS implements DemFile {
                 FileInputStream fileInputStream = new FileInputStream(file);
                 return fileInputStream;
         } finally {
-            IOUtils.closeQuietly(channel);
-            IOUtils.closeQuietly(stream);
         }
     }
 }
