@@ -27,4 +27,9 @@ public interface DemFile {
     long getSize();
 
     ByteBuffer asByteBuffer() throws IOException;
+
+    default InputStream asInputStream() throws IOException
+    {
+        return null;
+    }
 }
