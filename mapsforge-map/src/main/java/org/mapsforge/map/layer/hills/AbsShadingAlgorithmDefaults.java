@@ -35,9 +35,9 @@ public abstract class AbsShadingAlgorithmDefaults implements ShadingAlgorithm {
         int axisLength = getAxisLenght(source);
         int rowLen = axisLength + 1;
         try {
-            ByteBuffer map = source.getFile().asByteBuffer();
+            InputStream map = source.getFile().asInputStream();
 
-            byte[] bytes = convert(map, axisLength, rowLen, padding, source);
+            byte[] bytes = convertStream(map, axisLength, rowLen, padding, source);
             return new RawShadingResult(bytes, axisLength, axisLength, padding);
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, e.toString(), e);
