@@ -25,6 +25,11 @@ public abstract class AbsShadingAlgorithmDefaults implements ShadingAlgorithm {
 
     protected abstract byte[] convert(ByteBuffer map, int axisLength, int rowLen, int padding, HgtCache.HgtFileInfo source) throws IOException;
 
+    protected byte[] convertStream(InputStream map, int axisLength, int rowLen, int padding, HgtCache.HgtFileInfo source) throws IOException
+    {
+        return null;
+    }
+
     @Override
     public RawShadingResult transformToByteBuffer(HgtCache.HgtFileInfo source, int padding) {
         int axisLength = getAxisLenght(source);
