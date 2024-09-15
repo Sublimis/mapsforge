@@ -17,7 +17,6 @@ package org.mapsforge.map.android.hills;
 
 import android.content.ContentResolver;
 
-import org.mapsforge.core.util.IOUtils;
 import org.mapsforge.map.layer.hills.DemFile;
 
 import java.io.BufferedInputStream;
