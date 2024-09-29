@@ -15,11 +15,12 @@
  */
 package org.mapsforge.map.layer.hills;
 
+import org.mapsforge.core.util.IOUtils;
 import org.mapsforge.core.util.MercatorProjection;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.logging.Logger;
+import java.util.logging.Level;
 
 /**
  * <p>
@@ -35,7 +36,6 @@ import java.util.logging.Logger;
  */
 public class DiffuseLightShadingAlgorithm extends AbsShadingAlgorithmDefaults {
 
-    protected static final Logger LOGGER = Logger.getLogger(DiffuseLightShadingAlgorithm.class.getName());
     protected final float heightAngle;
     protected final double ast2;
     protected final double neutral;
@@ -66,6 +66,34 @@ public class DiffuseLightShadingAlgorithm extends AbsShadingAlgorithmDefaults {
 
     public double getLightHeight() {
         return a;
+    }
+
+    @Override
+    public RawShadingResult transformToByteBuffer(HgtCache.HgtFileInfo source, int padding) {
+        final int axisLength = getOutputAxisLen(source);
+        final int rowLen = axisLength + 1;
+
+        InputStream map = null;
+        try {
+            map = source
+                    .getFile()
+                    .asStream();
+
+            final byte[] bytes;
+            if (map != null) {
+                bytes = convert(map, axisLength, rowLen, padding, source);
+            } else {
+                // If stream could not be opened, simply return zeros
+                final int bitmapWidth = axisLength + 2 * padding;
+                bytes = new byte[bitmapWidth * bitmapWidth];
+            }
+            return new RawShadingResult(bytes, axisLength, axisLength, padding);
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, e.toString(), e);
+            return null;
+        } finally {
+            IOUtils.closeQuietly(map);
+        }
     }
 
     protected byte[] convert(InputStream din, int axisLength, int rowLen, int padding, HgtCache.HgtFileInfo fileInfo) throws IOException {

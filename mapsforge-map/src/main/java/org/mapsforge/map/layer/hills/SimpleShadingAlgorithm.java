@@ -15,8 +15,11 @@
  */
 package org.mapsforge.map.layer.hills;
 
+import org.mapsforge.core.util.IOUtils;
+
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.logging.Level;
 
 /**
  * Simple, but expressive slope visualisation (e.g. no pretensions of physical accuracy, separate north and west light sources instead of one northwest,
@@ -28,7 +31,7 @@ import java.io.InputStream;
  * </p>
  */
 public class SimpleShadingAlgorithm extends AbsShadingAlgorithmDefaults {
-//    private static final Logger LOGGER = Logger.getLogger(SimpleShadingAlgorithm.class.getName());
+
     public final double linearity;
     public final double scale;
 
@@ -64,6 +67,34 @@ public class SimpleShadingAlgorithm extends AbsShadingAlgorithmDefaults {
         x = Math.max(-128d, Math.min(127d, x));
         double ret = (Math.sin(0.5d * Math.PI * Math.sin(0.5d * Math.PI * Math.sin(0.5d * Math.PI * x / 128d))) * 128 * (1d - linearity) + x * linearity);
         return ret;
+    }
+
+    @Override
+    public RawShadingResult transformToByteBuffer(HgtCache.HgtFileInfo source, int padding) {
+        final int axisLength = getOutputAxisLen(source);
+        final int rowLen = axisLength + 1;
+
+        InputStream map = null;
+        try {
+            map = source
+                    .getFile()
+                    .asStream();
+
+            final byte[] bytes;
+            if (map != null) {
+                bytes = convert(map, axisLength, rowLen, padding, source);
+            } else {
+                // If stream could not be opened, simply return zeros
+                final int bitmapWidth = axisLength + 2 * padding;
+                bytes = new byte[bitmapWidth * bitmapWidth];
+            }
+            return new RawShadingResult(bytes, axisLength, axisLength, padding);
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, e.toString(), e);
+            return null;
+        } finally {
+            IOUtils.closeQuietly(map);
+        }
     }
 
     protected byte[] convert(InputStream din, int axisLength, int rowLen, int padding, HgtCache.HgtFileInfo fileInfo) throws IOException {

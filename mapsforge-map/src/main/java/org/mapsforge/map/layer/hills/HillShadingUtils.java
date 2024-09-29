@@ -14,10 +14,14 @@
  */
 package org.mapsforge.map.layer.hills;
 
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionHandler;
 import java.util.concurrent.ThreadFactory;
@@ -152,7 +156,8 @@ public class HillShadingUtils {
     public static void threadSleep(long milliseconds) {
         try {
             Thread.sleep(milliseconds);
-        } catch (Exception ignored) {
+        }
+        catch (Exception ignored) {
         }
     }
 
@@ -173,6 +178,33 @@ public class HillShadingUtils {
 
             if (atomic.compareAndSet(currValue, currValue + 1)) {
                 return true;
+            }
+        }
+    }
+
+    public static void skipNBytes(InputStream stream, long n) throws IOException {
+        if (stream != null) {
+            while (true) {
+                if (n > 0L) {
+                    long ns = stream.skip(n);
+                    if (ns > 0L && ns <= n) {
+                        n -= ns;
+                        continue;
+                    }
+
+                    if (ns == 0L) {
+                        if (stream.read() == -1) {
+                            throw new EOFException();
+                        }
+
+                        --n;
+                        continue;
+                    }
+
+                    throw new IOException("Unable to skip exactly");
+                }
+
+                return;
             }
         }
     }
@@ -203,9 +235,11 @@ public class HillShadingUtils {
 
                     try {
                         executor.execute(task);
-                    } catch (Exception ignored) {
                     }
-                } else {
+                    catch (Exception ignored) {
+                    }
+                }
+                else {
                     notifyTaskRejected(task);
                 }
             }
@@ -271,12 +305,15 @@ public class HillShadingUtils {
             lock(mSyncLock);
             try {
                 if (mThreadPool == null) {
-                    mThreadPool = new ThreadPoolExecutor(mCorePoolSize, mMaxPoolSize, mIdleThreadReleaseTimeout, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(mQueueSizeMax), new NormPriorityThreadFactory(mName), new BlockAndRetryOnRejection()) {
+                    mThreadPool = new ThreadPoolExecutor(mCorePoolSize, mMaxPoolSize, mIdleThreadReleaseTimeout, TimeUnit.SECONDS, new LinkedBlockingQueue<>(mQueueSizeMax), new NormPriorityThreadFactory(mName), new BlockAndRetryOnRejection()) {
                     };
 
-                    if (mIdleThreadReleaseTimeout > 0) mThreadPool.allowCoreThreadTimeOut(true);
+                    if (mIdleThreadReleaseTimeout > 0) {
+                        mThreadPool.allowCoreThreadTimeOut(true);
+                    }
                 }
-            } finally {
+            }
+            finally {
                 unlock(mSyncLock);
             }
 
@@ -295,7 +332,8 @@ public class HillShadingUtils {
                     mThreadPool.shutdown();
                     mThreadPool = null;
                 }
-            } finally {
+            }
+            finally {
                 unlock(mSyncLock);
             }
 
@@ -323,7 +361,8 @@ public class HillShadingUtils {
                         if (retVal) {
                             mRejectCount.set(0);
                         }
-                    } catch (Exception | OutOfMemoryError e) {
+                    }
+                    catch (Exception | OutOfMemoryError e) {
                         runnable.run();
 
                         retVal = true;
@@ -331,7 +370,8 @@ public class HillShadingUtils {
                 }
 
                 return retVal;
-            } finally {
+            }
+            finally {
                 unlock(mSyncLock);
             }
         }
@@ -345,10 +385,29 @@ public class HillShadingUtils {
         }
     }
 
+    public static class SilentFutureTask extends FutureTask<Boolean> {
+        public SilentFutureTask(final Callable<Boolean> callable) {
+            super(callable);
+        }
+
+        @Override
+        public Boolean get() {
+            Boolean output = null;
+
+            try {
+                output = super.get();
+            }
+            catch (Exception ignored) {
+            }
+
+            return output;
+        }
+    }
+
     public static class Awaiter {
         protected final Logger LOGGER = Logger.getLogger(this
-                .getClass()
-                .getName());
+                                                                 .getClass()
+                                                                 .getName());
 
         protected final int CheckTimeoutMillis = 100;
         protected final Object mSync = new Object();
@@ -363,14 +422,18 @@ public class HillShadingUtils {
                 synchronized (mSync) {
                     while (true) {
                         try {
-                            if (condition.call()) break;
-                        } catch (Exception e) {
+                            if (condition.call()) {
+                                break;
+                            }
+                        }
+                        catch (Exception e) {
                             LOGGER.log(Level.WARNING, e.toString());
                         }
 
                         try {
                             mSync.wait(CheckTimeoutMillis);
-                        } catch (InterruptedException ignored) {
+                        }
+                        catch (InterruptedException ignored) {
                         }
                     }
                 }
@@ -384,7 +447,8 @@ public class HillShadingUtils {
             synchronized (mSync) {
                 try {
                     mSync.notify();
-                } catch (Exception ignored) {
+                }
+                catch (Exception ignored) {
                 }
             }
         }
@@ -436,7 +500,8 @@ public class HillShadingUtils {
 
             if (output == null) {
                 output = new short[length];
-            } else if (output.length < length) {
+            }
+            else if (output.length < length) {
                 recycleArray(output);
 
                 output = new short[length];

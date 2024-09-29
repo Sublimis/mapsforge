@@ -14,10 +14,12 @@
  */
 package org.mapsforge.map.layer.hills;
 
+import org.mapsforge.core.util.IOUtils;
 import org.mapsforge.map.layer.hills.HgtCache.HgtFileInfo;
 import org.mapsforge.map.layer.hills.HillShadingUtils.Awaiter;
 import org.mapsforge.map.layer.hills.HillShadingUtils.HillShadingThreadPool;
 import org.mapsforge.map.layer.hills.HillShadingUtils.ShortArraysPool;
+import org.mapsforge.map.layer.hills.HillShadingUtils.SilentFutureTask;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -25,7 +27,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * <p>
@@ -33,9 +34,9 @@ import java.util.logging.Logger;
  * that are processed in parallel by other threads.
  * </p>
  * <p>
- * The implementation is such that there is one "producer" thread (ie. the caller thread) that just reads from the input (and does the synchronization),
- * and a custom number (>=0) of other "consumer" threads that just do the computations (a "thread pool").
- * It should be emphasized that every producer/caller thread has its own thread pool: Thread pools are not shared.
+ * The implementation is such that there are 1 + N (N>=0) "producer" threads (ie. the caller thread and N additional threads)
+ * that read from the input and do the synchronization, and M (>=0) "consumer" threads that do the computations.
+ * It should be emphasized that every caller thread has its own thread pool: Thread pools are not shared.
  * </p>
  * <p>
  * Special attention is paid to reducing memory consumption.
@@ -46,25 +47,32 @@ import java.util.logging.Logger;
  * Rough estimate of the <em>maximum</em> memory used per caller is as follows:
  * <br />
  * <br />
- * max_bytes_used = {@link #ElementsPerComputingTask} * (1 + 2 * {@link #mComputingThreadsCount}) * {@link Short#BYTES}
+ * max_bytes_used = {@link #ElementsPerComputingTask} * (1 + 2 * M) * (1 + N) * {@link Short#BYTES}
  * <br />
  * <br />
- * By default, with one additional computing thread used, this is around 96000 bytes (cca 100 kB) max memory usage per caller.
+ * By default, with two reading threads and one additional computing thread used, this is around 2 * 96000 bytes (cca 200 kB) max memory usage per caller.
  * If the computations are fast enough, the real memory usage is usually going to be several times smaller.
  * </p>
  */
 public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
 
-    protected final Logger LOGGER = Logger.getLogger(this
-            .getClass()
-            .getName());
+    /**
+     * Default number of additional reading threads ("producer" threads) per caller thread.
+     * Number N (>0) means there will be N additional threads (per caller thread) that will do the reading,
+     * while 0 means that only the caller thread will do the reading.
+     */
+    public static final int ReadingThreadsCountDefault = 1;
 
     /**
-     * Default number of computing threads per caller thread. 1 means an additional thread (per caller thread) will do the computations,
-     * while the caller thread will do the reading and synchronization.
+     * Default number of additional computing threads ("consumer" threads) per caller thread.
+     * Number N (>0) means there will be N additional threads (per caller thread) that will do the computing,
+     * while 0 means that producer thread(s) will also do the computing.
      */
     public static final int ComputingThreadsCountDefault = 1;
 
+    /**
+     * Default name prefix for additional threads created and used by hill shading. A numbered suffix will be appended.
+     */
     public final String ThreadPoolName = "MapsforgeHillShading";
 
     /**
@@ -74,13 +82,18 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
     protected final int ElementsPerComputingTask = 16000;
 
     /**
-     * Number of threads that will do the computations, >= 0.
+     * Number of additional "producer" threads that will do the reading (per caller thread), >= 0.
+     */
+    protected final int mReadingThreadsCount;
+
+    /**
+     * Number of additional "consumer" threads that will do the computations (per caller thread), >= 0.
      */
     protected final int mComputingThreadsCount;
 
     /**
      * Max number of active computing tasks per caller; if this limit is exceeded the reading will be throttled.
-     * It is computed as (1 + 2 * {@link #mComputingThreadsCount}) by default.
+     * It is computed as (1 + 2 * {@link #mComputingThreadsCount}) * (1 + {@link #mReadingThreadsCount}) by default.
      * An active task is a task that is currently being processed or has been prepared and is waiting to be processed.
      */
     protected final int mActiveTasksCountMax;
@@ -95,25 +108,32 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
     protected volatile boolean mStopSignal = false;
 
     /**
-     * @param computingThreadsCount Number of threads that will do the computations.
-     *                              This is in addition to the calling thread, which only does the reading and synchronization in this case.
-     *                              Can be zero, in which case the calling thread does all the work.
+     * @param readingThreadsCount   Number of "producer" threads that will do the reading, >= 0.
+     *                              Number N (>0) means there will be N additional threads (per caller thread) that will do the reading,
+     *                              while 0 means that only the caller thread will do the reading.
+     *                              The only time you'd want to set this to zero is when your data source does not support skipping,
+     *                              ie. the data source is not a file and/or its {@link InputStream#skip(long)} is inefficient.
+     *                              The default is 1.
+     * @param computingThreadsCount Number of "consumer" threads that will do the computations, >= 0.
+     *                              Number M (>0) means there will be M additional threads (per caller thread) that will do the computing,
+     *                              while 0 means that producer thread(s) will also do the computing.
      *                              The only times you'd want to set this to zero are when memory conservation is a top priority
      *                              or when you're running on a single-threaded system.
      *                              The default is 1.
      */
-    public AThreadedHillShading(final int computingThreadsCount) {
+    public AThreadedHillShading(final int readingThreadsCount, final int computingThreadsCount) {
         super();
 
+        mReadingThreadsCount = Math.max(0, readingThreadsCount);
         mComputingThreadsCount = Math.max(0, computingThreadsCount);
-        mActiveTasksCountMax = 1 + 2 * mComputingThreadsCount;
+        mActiveTasksCountMax = (1 + 2 * mComputingThreadsCount) * (1 + mReadingThreadsCount);
     }
 
     /**
      * Uses one separate computing thread by default.
      */
     public AThreadedHillShading() {
-        this(ComputingThreadsCountDefault);
+        this(ReadingThreadsCountDefault, ComputingThreadsCountDefault);
     }
 
     /**
@@ -137,134 +157,98 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
      */
     @Override
     protected byte[] convert(InputStream inputStream, int dummyAxisLen, int dummyRowLen, final int padding, HgtFileInfo fileInfo) throws IOException {
-        return doTheWork(inputStream, padding, fileInfo);
+        return doTheWork(padding, fileInfo);
     }
 
-    protected byte[] doTheWork(final InputStream inputStream, final int padding, final HgtFileInfo fileInfo) throws IOException {
+    protected byte[] doTheWork(final int padding, final HgtFileInfo fileInfo) throws IOException {
         final int outputAxisLen = getOutputAxisLen(fileInfo);
         final int inputAxisLen = getInputAxisLen(fileInfo);
         final int outputWidth = outputAxisLen + 2 * padding;
         final int lineBufferSize = inputAxisLen + 1;
-        final double northHalfUnitDistancePerLine = 0.5 * getLatUnitDistance(fileInfo.northLat(), inputAxisLen) / inputAxisLen;
-        final double southHalfUnitDistancePerLine = 0.5 * getLatUnitDistance(fileInfo.southLat(), inputAxisLen) / inputAxisLen;
+        final double northUnitDistancePerLine = getLatUnitDistance(fileInfo.northLat(), inputAxisLen) / inputAxisLen;
+        final double southUnitDistancePerLine = getLatUnitDistance(fileInfo.southLat(), inputAxisLen) / inputAxisLen;
 
         final byte[] output = new byte[outputWidth * outputWidth];
 
         if (isNotStopped()) {
-            final Awaiter awaiter = new Awaiter();
             final AtomicInteger activeTasksCount = new AtomicInteger(0);
             final ShortArraysPool inputArraysPool = new ShortArraysPool(1 + mActiveTasksCountMax), lineBuffersPool = new ShortArraysPool(1 + mActiveTasksCountMax);
 
-            final ComputingParams computingParams = new ComputingParams.Builder()
-                    .setInputStream(inputStream)
-                    .setOutput(output)
-                    .setAwaiter(awaiter)
-                    .setInputAxisLen(inputAxisLen)
-                    .setOutputAxisLen(outputAxisLen)
-                    .setOutputWidth(outputWidth)
-                    .setLineBufferSize(lineBufferSize)
-                    .setPadding(padding)
-                    .setNorthUnitDistancePerLine(northHalfUnitDistancePerLine)
-                    .setSouthUnitDistancePerLine(southHalfUnitDistancePerLine)
-                    .setActiveTasksCount(activeTasksCount)
-                    .setInputArraysPool(inputArraysPool)
-                    .setLineBuffersPool(lineBuffersPool)
-                    .build();
+            final int readingTasksCount = 1 + mReadingThreadsCount;
 
-            final int tasksCount = determineComputingTasksCount(computingParams);
-            final int linesPerTask = inputAxisLen / tasksCount;
+            final int computingTasksCount = Math.max(readingTasksCount, determineComputingTasksCount(inputAxisLen));
+            final int linesPerComputeTask = inputAxisLen / computingTasksCount;
 
-            final ComputingTask[] computingTasks = new ComputingTask[tasksCount];
+            final int computeTasksPerReadingTask = computingTasksCount / readingTasksCount;
+//            final int linesPerReadingTask = linesPerComputeTask * computeTasksPerReadingTask;
+            final SilentFutureTask[] readingTasks = new SilentFutureTask[readingTasksCount];
 
-            short[] lineBuffer = new short[lineBufferSize], lineBufferTmp = null;
+            for (int readingTaskIndex = 0; readingTaskIndex < readingTasksCount; readingTaskIndex++) {
 
-            for (int taskIndex = 0; taskIndex < tasksCount; taskIndex++) {
-                paceReading(awaiter, activeTasksCount, mActiveTasksCountMax);
-
-                if (taskIndex > 0) {
-                    lineBuffer = lineBufferTmp;
-                    lineBufferTmp = null;
-                } else {
-                    short last = 0;
-
-                    // First line for the first task is done separately
-                    for (int col = 0; col < lineBufferSize; col++) {
-                        last = readNext(inputStream, last);
-
-                        lineBuffer[col] = last;
-                    }
-                }
-
-                final int lineFrom, lineTo;
+                final int computingTaskFrom, computingTaskTo;
                 {
-                    lineFrom = 1 + linesPerTask * taskIndex;
+                    computingTaskFrom = computeTasksPerReadingTask * readingTaskIndex;
 
-                    if (taskIndex < tasksCount - 1) {
-                        lineTo = lineFrom + linesPerTask - 1;
-                    } else {
-                        lineTo = inputAxisLen;
+                    if (readingTaskIndex < readingTasksCount - 1) {
+                        computingTaskTo = computingTaskFrom + computeTasksPerReadingTask;
+                    }
+                    else {
+                        computingTaskTo = computingTasksCount;
                     }
                 }
 
-                final short[] input;
-                {
-                    if (taskIndex < tasksCount - 1) {
-                        input = inputArraysPool.getArray(lineBufferSize * (lineTo - lineFrom + 1));
-                        lineBufferTmp = lineBuffersPool.getArray(lineBufferSize);
+                InputStream readStream = null;
+                try {
+                    readStream = fileInfo
+                            .getFile()
+                            .asStream();
+                }
+                catch (IOException e) {
+                    LOGGER.log(Level.SEVERE, e.toString(), e);
+                }
 
-                        int inputIx = 0;
+                if (readingTaskIndex > 0) {
+                    final long skipAmount = (long) lineBufferSize * linesPerComputeTask * computingTaskFrom - lineBufferSize;
 
-                        // First line is done separately
-                        for (; inputIx <= inputAxisLen && isNotStopped(); inputIx++) {
-                            input[inputIx] = readNextFromStream(inputStream, lineBuffer, inputIx, 0);
-                        }
-
-                        for (int line = lineFrom + 1; line <= lineTo - 1 && isNotStopped(); line++) {
-                            // Inner loop, critical for performance
-                            for (int col = 0; col <= inputAxisLen; col++, inputIx++) {
-                                input[inputIx] = readNextFromStream(inputStream, input, inputIx, lineBufferSize);
-                            }
-                        }
-
-                        // Last line is done separately
-                        for (int col = 0; col <= inputAxisLen && isNotStopped(); col++, inputIx++) {
-                            final short point = readNextFromStream(inputStream, input, inputIx, lineBufferSize);
-                            input[inputIx] = point;
-                            lineBufferTmp[col] = point;
-                        }
-                    } else {
-                        input = null;
+                    try {
+                        HillShadingUtils.skipNBytes(readStream, skipAmount * Short.SIZE / Byte.SIZE);
+                    }
+                    catch (IOException e) {
+                        LOGGER.log(Level.SEVERE, e.toString(), e);
                     }
                 }
 
-                final ComputingTask computingTask = new ComputingTask(lineFrom, lineTo, input, lineBuffer, computingParams);
-                computingTasks[taskIndex] = computingTask;
+                final ComputingParams computingParams = new ComputingParams.Builder()
+                        .setInputStream(readStream)
+                        .setOutput(output)
+                        .setAwaiter(new Awaiter())
+                        .setInputAxisLen(inputAxisLen)
+                        .setOutputAxisLen(outputAxisLen)
+                        .setOutputWidth(outputWidth)
+                        .setLineBufferSize(lineBufferSize)
+                        .setPadding(padding)
+                        .setNorthUnitDistancePerLine(northUnitDistancePerLine)
+                        .setSouthUnitDistancePerLine(southUnitDistancePerLine)
+                        .setActiveTasksCount(activeTasksCount)
+                        .setInputArraysPool(inputArraysPool)
+                        .setLineBuffersPool(lineBuffersPool)
+                        .build();
 
-                if (taskIndex < tasksCount - 1) {
-                    postToThreadPoolOrRun(computingTask);
-                } else {
-                    // Delegate
-                    computingTask.run();
+                final SilentFutureTask readingTask = getReadingTask(readStream, computingTasksCount, computingTaskFrom, computingTaskTo, linesPerComputeTask, computingParams);
+                readingTasks[readingTaskIndex] = readingTask;
+
+                if (readingTaskIndex < readingTasksCount - 1) {
+                    postToThreadPoolOrRun(readingTask);
+                }
+                else {
+                    readingTask.run();
                 }
             }
 
-            notifyReadingDone(activeTasksCount.get());
-
-            if (tasksCount > 1) {
-                final Callable<Boolean> condition = new Callable<Boolean>() {
-                    @Override
-                    public Boolean call() {
-                        boolean retVal = true;
-
-                        for (final ComputingTask computingTask : computingTasks) {
-                            retVal &= computingTask.mIsDone;
-                        }
-
-                        return retVal;
-                    }
-                };
-
-                awaiter.doWait(condition);
+            if (readingTasksCount > 1) {
+                for (final SilentFutureTask readingTask : readingTasks) {
+                    readingTask.get();
+                }
             }
         }
 
@@ -291,21 +275,10 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
     }
 
     /**
-     * Called when reading from the input is complete.
-     * Computing may still be ongoing.
-     * Can be used to profile performance, for example.
+     * Called when there are already too many active computing tasks (being processed or waiting in queue), so the reading must be slowed down to conserve memory.
+     * If you get this notification, you may consider increasing the number of computing threads.
      *
-     * @param activeComputingTasksCount How many computing tasks are not yet completed at the time this is called.
-     */
-    protected void notifyReadingDone(final int activeComputingTasksCount) {
-    }
-
-    /**
-     * Called when there are already too many active computing tasks, so the reading must be slowed down to conserve memory.
-     * An active task is a task that is currently being processed or has been prepared and is waiting to be processed.
-     * Can be used to profile performance, for example.
-     *
-     * @param activeComputingTasksCount How many computing tasks are not yet completed at the time this is called.
+     * @param activeComputingTasksCount How many computing tasks are waiting for completion at the time this is called.
      */
     protected void notifyReadingPaced(final int activeComputingTasksCount) {
     }
@@ -313,19 +286,24 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
     /**
      * Decides a total number of computing tasks will be used for the given input parameters.
      */
-    protected int determineComputingTasksCount(final ComputingParams computingParams) {
+    protected int determineComputingTasksCount(final int inputAxisLen) {
         final int retVal;
 
         if (mComputingThreadsCount > 0) {
-            final long computingTasksCount = Math.max(1L, Math.min(computingParams.mInputAxisLen / 2, (long) computingParams.mInputAxisLen * computingParams.mInputAxisLen / ElementsPerComputingTask));
+            final long computingTasksCount = Math.max(1L, Math.min(inputAxisLen / 2, (long) inputAxisLen * inputAxisLen / ElementsPerComputingTask));
 
             retVal = (int) computingTasksCount;
-        } else {
+        }
+        else {
             // If multi threading is not used, return a single task for the whole job
             retVal = 1;
         }
 
         return retVal;
+    }
+
+    protected int threadCount() {
+        return mComputingThreadsCount + mReadingThreadsCount;
     }
 
     /**
@@ -334,12 +312,12 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
      * @param code A code to run.
      */
     protected void postToThreadPoolOrRun(final Runnable code) {
-        boolean retVal = false;
+        boolean status = false;
 
         final AtomicReference<HillShadingThreadPool> threadPoolReference = mThreadPool.get();
 
         if (threadPoolReference != null) {
-            if (threadPoolReference.get() == null && mComputingThreadsCount > 0) {
+            if (threadPoolReference.get() == null && threadCount() > 0) {
                 synchronized (threadPoolReference) {
                     if (threadPoolReference.get() == null) {
                         threadPoolReference.set(createThreadPool());
@@ -350,21 +328,20 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
             final HillShadingThreadPool threadPool = threadPoolReference.get();
 
             if (threadPool != null) {
-                retVal = threadPool.execute(code);
+                status = threadPool.execute(code);
             }
         }
 
-        if (false == retVal) {
+        if (false == status) {
             if (code != null) {
                 code.run();
-
-                retVal = true;
             }
         }
     }
 
     protected HillShadingThreadPool createThreadPool() {
-        return new HillShadingThreadPool(mComputingThreadsCount, mComputingThreadsCount, Integer.MAX_VALUE, 1, ThreadPoolName).start();
+        final int threadCount = threadCount();
+        return new HillShadingThreadPool(threadCount, threadCount, Integer.MAX_VALUE, 1, ThreadPoolName).start();
     }
 
     public short readNextFromStream(final InputStream is, final short[] input, final int inputIx, final int fallbackIxDelta) throws IOException {
@@ -374,10 +351,13 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
         if (read1 != -1 && read2 != -1) {
             short read = (short) ((read1 << 8) | read2);
 
-            if (read == Short.MIN_VALUE) return input[inputIx - fallbackIxDelta];
+            if (read == Short.MIN_VALUE) {
+                return input[inputIx - fallbackIxDelta];
+            }
 
             return read;
-        } else {
+        }
+        else {
             return input[inputIx - fallbackIxDelta];
         }
     }
@@ -418,18 +398,151 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
         return mStopSignal;
     }
 
+    public SilentFutureTask getReadingTask(InputStream readStream, int computingTasksCount, int computingTaskFrom, int computingTaskTo, int linesPerComputeTask, ComputingParams computingParams) {
+        return new SilentFutureTask(new ReadingTask(readStream, computingTasksCount, computingTaskFrom, computingTaskTo, linesPerComputeTask, computingParams));
+    }
+
+    public SilentFutureTask getComputingTask(int lineFrom, int lineTo, short[] input, short[] lineBuffer, ComputingParams computingParams) {
+        return new SilentFutureTask(new ComputingTask(lineFrom, lineTo, input, lineBuffer, computingParams));
+    }
+
+    /**
+     * A reading task which reads part of the input.
+     */
+    protected class ReadingTask implements Callable<Boolean> {
+        protected final InputStream mInputStream;
+        protected final int mComputingTasksCount, mComputingTaskFrom, mComputingTaskTo, mLinesPerCompTask;
+        protected final ComputingParams mComputingParams;
+
+        public ReadingTask(InputStream inputStream, int computingTasksCount, int taskFrom, int taskTo, int linesPerTask, ComputingParams computingParams) {
+            mInputStream = inputStream;
+            mComputingTasksCount = computingTasksCount;
+            mComputingTaskFrom = taskFrom;
+            mComputingTaskTo = taskTo;
+            mLinesPerCompTask = linesPerTask;
+            mComputingParams = computingParams;
+        }
+
+        @Override
+        public Boolean call() {
+            boolean retVal = false;
+
+            try {
+                if (mInputStream != null) {
+                    final SilentFutureTask[] computingTasks = new SilentFutureTask[mComputingTaskTo - mComputingTaskFrom];
+
+                    final int inputAxisLen = mComputingParams.mInputAxisLen;
+                    final int lineBufferSize = mComputingParams.mLineBufferSize;
+                    final AtomicInteger activeTasksCount = mComputingParams.mActiveTasksCount;
+                    final Awaiter awaiter = mComputingParams.mAwaiter;
+                    final ShortArraysPool inputArraysPool = mComputingParams.mInputArraysPool, lineBuffersPool = mComputingParams.mLineBuffersPool;
+
+                    short[] lineBuffer = new short[lineBufferSize], lineBufferTmp = null;
+
+                    for (int compTaskIndex = mComputingTaskFrom; compTaskIndex < mComputingTaskTo; compTaskIndex++) {
+                        paceReading(awaiter, activeTasksCount, mActiveTasksCountMax);
+
+                        if (compTaskIndex > mComputingTaskFrom) {
+                            lineBuffer = lineBufferTmp;
+                            lineBufferTmp = null;
+                        }
+                        else {
+                            short last = 0;
+
+                            // First line for the first task is done separately
+                            for (int col = 0; col < lineBufferSize; col++) {
+                                last = readNext(mInputStream, last);
+
+                                lineBuffer[col] = last;
+                            }
+                        }
+
+                        final int lineFrom, lineTo;
+                        {
+                            lineFrom = 1 + mLinesPerCompTask * compTaskIndex;
+
+                            if (compTaskIndex < mComputingTasksCount - 1) {
+                                lineTo = lineFrom + mLinesPerCompTask - 1;
+                            }
+                            else {
+                                lineTo = inputAxisLen;
+                            }
+                        }
+
+                        final short[] input;
+                        {
+                            if (compTaskIndex < mComputingTaskTo - 1) {
+                                input = inputArraysPool.getArray(lineBufferSize * (lineTo - lineFrom + 1));
+                                lineBufferTmp = lineBuffersPool.getArray(lineBufferSize);
+
+                                int inputIx = 0;
+
+                                // First line is done separately
+                                for (; inputIx <= inputAxisLen && isNotStopped(); inputIx++) {
+                                    input[inputIx] = readNextFromStream(mInputStream, lineBuffer, inputIx, 0);
+                                }
+
+                                for (int line = lineFrom + 1; line <= lineTo - 1 && isNotStopped(); line++) {
+                                    // Inner loop, critical for performance
+                                    for (int col = 0; col <= inputAxisLen; col++, inputIx++) {
+                                        input[inputIx] = readNextFromStream(mInputStream, input, inputIx, lineBufferSize);
+                                    }
+                                }
+
+                                // Last line is done separately
+                                for (int col = 0; col <= inputAxisLen && isNotStopped(); col++, inputIx++) {
+                                    final short point = readNextFromStream(mInputStream, input, inputIx, lineBufferSize);
+                                    input[inputIx] = point;
+                                    lineBufferTmp[col] = point;
+                                }
+                            }
+                            else {
+                                input = null;
+                            }
+                        }
+
+                        final SilentFutureTask computingTask = getComputingTask(lineFrom, lineTo, input, lineBuffer, mComputingParams);
+                        computingTasks[compTaskIndex - mComputingTaskFrom] = computingTask;
+
+                        if (compTaskIndex < mComputingTaskTo - 1) {
+                            postToThreadPoolOrRun(computingTask);
+                        }
+                        else {
+                            computingTask.run();
+                        }
+                    }
+
+                    if (computingTasks.length > 1) {
+                        for (final SilentFutureTask computingTask : computingTasks) {
+                            computingTask.get();
+                        }
+                    }
+                }
+
+                retVal = true;
+
+            }
+            catch (Exception e) {
+                LOGGER.log(Level.WARNING, e.toString());
+            }
+            finally {
+                IOUtils.closeQuietly(mInputStream);
+            }
+
+            return retVal;
+        }
+    }
+
     /**
      * A computing task which converts part of the input to part of the output, by calling
      * {@link #processOneUnitElement(double, double, double, double, double, int, ComputingParams)}
      * on all input unit elements from the given part.
      * The part will be the whole input and output, if multi threading is not used.
      */
-    protected class ComputingTask implements Runnable {
+    protected class ComputingTask implements Callable<Boolean> {
         protected final short[] mInput, mLineBuffer;
         protected final int mLineFrom, mLineTo;
         protected final ComputingParams mComputingParams;
-
-        protected volatile boolean mIsDone = false;
 
         public ComputingTask(int lineFrom, int lineTo, short[] input, short[] lineBuffer, ComputingParams computingParams) {
             mInput = input;
@@ -440,7 +553,9 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
         }
 
         @Override
-        public void run() {
+        public Boolean call() {
+            boolean retVal = false;
+
             try {
                 final int resolutionFactor = mComputingParams.mOutputAxisLen / mComputingParams.mInputAxisLen;
 
@@ -498,7 +613,8 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
                     }
 
                     mComputingParams.mInputArraysPool.recycleArray(mInput);
-                } else {
+                }
+                else {
                     int lineBufferIx = 0;
 
                     for (int line = mLineFrom; line <= mLineTo && isNotStopped(); line++) {
@@ -529,13 +645,19 @@ public abstract class AThreadedHillShading extends AbsShadingAlgorithmDefaults {
 
                     mComputingParams.mLineBuffersPool.recycleArray(mLineBuffer);
                 }
-            } catch (Exception e) {
+
+                retVal = true;
+
+            }
+            catch (Exception e) {
                 LOGGER.log(Level.WARNING, e.toString());
-            } finally {
-                mIsDone = true;
+            }
+            finally {
                 mComputingParams.mActiveTasksCount.decrementAndGet();
                 mComputingParams.mAwaiter.doNotify();
             }
+
+            return retVal;
         }
 
         protected short readNextFromStream(final short fallback) throws IOException {
