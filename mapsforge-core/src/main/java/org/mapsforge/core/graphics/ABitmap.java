@@ -1,5 +1,4 @@
 /*
- * Copyright 2017 usrusr
  * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
@@ -15,31 +14,12 @@
  */
 package org.mapsforge.core.graphics;
 
-import org.mapsforge.core.model.BoundingBox;
+public abstract class ABitmap implements Bitmap {
 
-public interface HillshadingBitmap extends Bitmap {
-    enum Border {
-        WEST(true), NORTH(false), EAST(true), SOUTH(false);
+   protected final Object mMutex = new Object();
 
-        public final boolean vertical;
-
-        Border(boolean vertical) {
-            this.vertical = vertical;
-        }
-    }
-
-    /**
-     * Return geo bounds of the area within the padding.
-     */
-    BoundingBox getAreaRect();
-
-    /**
-     * Optional padding (lies outside of areaRect).
-     */
-    int getPadding();
-
-    /**
-     * @return Size of this bitmap. [bytes]
-     */
-    long getSizeBytes();
+   @Override
+   public Object getMutex() {
+      return mMutex;
+   }
 }
