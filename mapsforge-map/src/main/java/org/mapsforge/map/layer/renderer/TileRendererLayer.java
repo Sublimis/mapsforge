@@ -101,7 +101,7 @@ public class TileRendererLayer extends TileLayer<RendererJob> implements Observe
         } else {
             this.tileBasedLabelStore = null;
         }
-        this.databaseRenderer = new DatabaseRenderer(this.mapDataStore, graphicFactory, tileCache, tileBasedLabelStore, renderLabels, cacheLabels, hillsRenderConfig);
+        this.databaseRenderer = new DatabaseRenderer(this.mapDataStore, graphicFactory, tileCache, tileBasedLabelStore, renderLabels || cacheLabels, hillsRenderConfig);
         this.textScale = 1;
     }
 

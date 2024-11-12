@@ -1,5 +1,6 @@
 /*
  * Copyright 2017-2022 usrusr
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -24,9 +25,9 @@ import java.util.concurrent.ExecutionException;
  * Eager indexing on a dedicated thread can be triggered with {@link #indexOnThread} (e.g. after a configuration change or during setup)</p>
  */
 public class HillsRenderConfig {
-    private ShadeTileSource tileSource;
+    private final ShadeTileSource tileSource;
 
-    private float magnitudeScaleFactor = 1f;
+    private volatile float magnitudeScaleFactor = 1f;
 
 
     public HillsRenderConfig(ShadeTileSource tileSource) {
@@ -44,22 +45,24 @@ public class HillsRenderConfig {
     }
 
     /**
+     *
      * @param latitudeOfSouthWestCorner  tile ID latitude (southwest corner, as customary in .hgt)
      * @param longitudeOfSouthWestCorner tile ID longitude (southwest corner, as customary in .hgt)
-     * @param pxPerLat                   pixels per degree of latitude (to determine padding quality requirements)
-     * @param pxPerLng                   pixels per degree of longitude (to determine padding quality requirements)
+     * @param zoomLevel                  Zoom level
+     * @param pxPerLat                   Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon                   Tile pixels per degree of longitude (to determine shading quality requirements)
      * @return
      * @throws ExecutionException
      * @throws InterruptedException
      */
-    public HillshadingBitmap getShadingTile(int latitudeOfSouthWestCorner, int longitudeOfSouthWestCorner, double pxPerLat, double pxPerLng) throws ExecutionException, InterruptedException {
+    public HillshadingBitmap getShadingTile(int latitudeOfSouthWestCorner, int longitudeOfSouthWestCorner, int zoomLevel, double pxPerLat, double pxPerLon) throws ExecutionException, InterruptedException {
         ShadeTileSource tileSource = this.tileSource;
         if (tileSource == null) return null;
 
-        HillshadingBitmap ret = tileSource.getHillshadingBitmap(latitudeOfSouthWestCorner, longitudeOfSouthWestCorner, pxPerLat, pxPerLng);
+        HillshadingBitmap ret = tileSource.getHillshadingBitmap(latitudeOfSouthWestCorner, longitudeOfSouthWestCorner, zoomLevel, pxPerLat, pxPerLon);
         if (ret == null && Math.abs(longitudeOfSouthWestCorner) > 178) { // don't think too hard about where exactly the border is (not much height data there anyway)
             int eastInt = longitudeOfSouthWestCorner > 0 ? longitudeOfSouthWestCorner - 180 : longitudeOfSouthWestCorner + 180;
-            ret = tileSource.getHillshadingBitmap(latitudeOfSouthWestCorner, eastInt, pxPerLat, pxPerLng);
+            ret = tileSource.getHillshadingBitmap(latitudeOfSouthWestCorner, eastInt, zoomLevel, pxPerLat, pxPerLon);
         }
 
         return ret;
@@ -77,11 +80,9 @@ public class HillsRenderConfig {
         this.magnitudeScaleFactor = magnitudeScaleFactor;
     }
 
-    public ShadeTileSource getTileSource() {
-        return tileSource;
-    }
+    public boolean isWideZoomRange() {
+        final ShadingAlgorithm algorithm = this.tileSource.getAlgorithm();
 
-    public void setTileSource(ShadeTileSource tileSource) {
-        this.tileSource = tileSource;
+        return algorithm instanceof IAdaptiveHillShading;
     }
 }

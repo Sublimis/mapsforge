@@ -62,21 +62,16 @@ public class DatabaseRenderer extends StandardRenderer {
      * @param tileCache         where tiles are cached (needed if labels are drawn directly onto tiles, otherwise null)
      * @param labelStore        where labels are cached.
      * @param renderLabels      if labels should be rendered.
-     * @param cacheLabels       if labels should be cached.
      * @param hillsRenderConfig the hillshading setup to be used (can be null).
      */
     public DatabaseRenderer(MapDataStore mapDataStore, GraphicFactory graphicFactory, TileCache tileCache,
-                            TileBasedLabelStore labelStore, boolean renderLabels, boolean cacheLabels,
+                            TileBasedLabelStore labelStore, boolean renderLabels,
                             HillsRenderConfig hillsRenderConfig) {
-        super(mapDataStore, graphicFactory, renderLabels || cacheLabels, hillsRenderConfig);
+        super(mapDataStore, graphicFactory, renderLabels, hillsRenderConfig);
         this.tileCache = tileCache;
         this.labelStore = labelStore;
         this.renderLabels = renderLabels;
-        if (!renderLabels) {
-            this.tileDependencies = null;
-        } else {
-            this.tileDependencies = new TileDependencies();
-        }
+        this.tileDependencies = new TileDependencies();
     }
 
     /**
@@ -84,10 +79,11 @@ public class DatabaseRenderer extends StandardRenderer {
      *
      * @param rendererJob the job that should be executed.
      */
-    public synchronized TileBitmap executeJob(RendererJob rendererJob) {
+    public TileBitmap executeJob(RendererJob rendererJob) {
+        TileBitmap output = null;
         RenderContext renderContext = null;
         try {
-            renderContext = new RenderContext(rendererJob, new CanvasRasterer(graphicFactory));
+            renderContext = new RenderContext(rendererJob, graphicFactory);
 
             if (renderBitmap(renderContext)) {
                 TileBitmap bitmap = null;
@@ -98,14 +94,15 @@ public class DatabaseRenderer extends StandardRenderer {
                 }
 
                 if (!rendererJob.labelsOnly) {
-                    renderContext.renderTheme.matchHillShadings(this, renderContext);
                     bitmap = this.graphicFactory.createTileBitmap(rendererJob.tile.tileSize, rendererJob.hasAlpha);
                     bitmap.setTimestamp(rendererJob.mapDataStore.getDataTimestamp(rendererJob.tile));
                     renderContext.canvasRasterer.setCanvasBitmap(bitmap);
                     if (!rendererJob.hasAlpha && rendererJob.displayModel.getBackgroundColor() != renderContext.renderTheme.getMapBackground()) {
                         renderContext.canvasRasterer.fill(renderContext.renderTheme.getMapBackground());
                     }
-                    renderContext.canvasRasterer.drawWays(renderContext);
+
+                    renderContext.renderTheme.matchHillShadings(renderContext, this.hillsRenderConfig);
+                    renderContext.drawWays();
                 }
 
                 if (this.renderLabels) {
@@ -115,7 +112,7 @@ public class DatabaseRenderer extends StandardRenderer {
                 }
                 if (this.labelStore != null) {
                     // store elements for this tile in the label cache
-                    this.labelStore.storeMapItems(rendererJob.tile, renderContext.labels);
+                    this.labelStore.storeMapItems(rendererJob.tile, renderContext.getLabels());
                 }
 
                 if (!rendererJob.labelsOnly && renderContext.renderTheme.hasMapBackgroundOutside()) {
@@ -127,28 +124,33 @@ public class DatabaseRenderer extends StandardRenderer {
                         renderContext.canvasRasterer.fillOutsideAreas(Color.TRANSPARENT, insideArea);
                     }
                 }
-                return bitmap;
+
+                output = bitmap;
+            } else {
+                // outside of map area with background defined:
+                output = createBackgroundBitmap(renderContext);
             }
-            // outside of map area with background defined:
-            return createBackgroundBitmap(renderContext);
         } catch (Exception e) {
             LOGGER.warning(e.toString());
-            return null;
         } finally {
             if (renderContext != null) {
                 renderContext.destroy();
             }
+            if (!rendererJob.labelsOnly && output != null) {
+                tileCache.put(rendererJob, output);
+                removeTileInProgress(rendererJob.tile);
+            }
         }
+
+        return output;
     }
 
     public MapDataStore getMapDatabase() {
         return this.mapDataStore;
     }
 
-    void removeTileInProgress(Tile tile) {
-        if (this.tileDependencies != null) {
-            this.tileDependencies.removeTileInProgress(tile);
-        }
+    protected void removeTileInProgress(Tile tile) {
+        this.tileDependencies.removeTileInProgress(tile);
     }
 
     /**
@@ -164,7 +166,6 @@ public class DatabaseRenderer extends StandardRenderer {
             renderContext.canvasRasterer.fill(renderContext.renderTheme.getMapBackgroundOutside());
         }
         return bitmap;
-
     }
 
     private Set<MapElementContainer> processLabels(RenderContext renderContext) {
@@ -193,7 +194,7 @@ public class DatabaseRenderer extends StandardRenderer {
                     labelsToDraw.addAll(tileDependencies.getOverlappingElements(neighbour, renderContext.rendererJob.tile));
 
                     // but we need to remove the labels for this tile that overlap onto a tile that has been drawn
-                    for (MapElementContainer current : renderContext.labels) {
+                    for (MapElementContainer current : renderContext.getLabels()) {
                         if (current.intersects(neighbour.getBoundaryAbsolute())) {
                             undrawableElements.add(current);
                         }
@@ -208,13 +209,13 @@ public class DatabaseRenderer extends StandardRenderer {
 
             // now we remove the elements that overlap onto a drawn tile from the list of labels
             // for this tile
-            renderContext.labels.removeAll(undrawableElements);
+            renderContext.clearLabels(undrawableElements);
 
             // at this point we have two lists: one is the list of labels that must be drawn because
             // they already overlap from other tiles. The second one is currentLabels that contains
             // the elements on this tile that do not overlap onto a drawn tile. Now we sort this list and
             // remove those elements that clash in this list already.
-            List<MapElementContainer> currentElementsOrdered = LayerUtil.collisionFreeOrdered(renderContext.labels, Rotation.NULL_ROTATION);
+            List<MapElementContainer> currentElementsOrdered = LayerUtil.collisionFreeOrdered(renderContext.getLabels(), Rotation.NULL_ROTATION);
 
             // now we go through this list, ordered by priority, to see which can be drawn without clashing.
             Iterator<MapElementContainer> currentMapElementsIterator = currentElementsOrdered.iterator();

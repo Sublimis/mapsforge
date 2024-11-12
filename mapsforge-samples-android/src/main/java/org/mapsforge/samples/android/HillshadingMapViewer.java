@@ -84,7 +84,7 @@ public class HillshadingMapViewer extends DefaultTheme {
         }
         if (anyDems != null) {
             // minimum setup for hillshading
-            MemoryCachingHgtReaderTileSource hillTileSource = new MemoryCachingHgtReaderTileSource(anyDems, new StandardClasyHillShading(), AndroidGraphicFactory.INSTANCE);
+            MemoryCachingHgtReaderTileSource hillTileSource = new MemoryCachingHgtReaderTileSource(anyDems, new AdaptiveClasyHillShading(), AndroidGraphicFactory.INSTANCE);
             customizeConfig(hillTileSource);
             hillsConfig = new HillsRenderConfig(hillTileSource);
 
@@ -96,7 +96,6 @@ public class HillshadingMapViewer extends DefaultTheme {
     }
 
     private void customizeConfig(MemoryCachingHgtReaderTileSource hillTileSource) {
-        hillTileSource.setEnableInterpolationOverlap(true);
     }
 
     @Override
