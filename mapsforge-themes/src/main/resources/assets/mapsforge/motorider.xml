@@ -307,7 +307,7 @@
     <rule e="way" k="freizeitkarte" v="meer">
         <area fill="#B3DDFF" />
     </rule>
-	
+
     <!-- color of normal land unless defined as forest, grass etc -->
     <rule e="way" k="natural" v="nosea">
         <area fill="#ffffff" stroke="#ffffff" stroke-width="1.0" />
@@ -1863,7 +1863,7 @@
             </rule>
         </rule>
 	</rule>
-	
+
 	<!-- entertainment venues LAYER -->
     <rule cat="entertainment" e="any" k="*" v="*" zoom-min="16">
         <rule e="any" k="amenity" v="cinema" zoom-min="16">
@@ -2066,5 +2066,5 @@
 			</rule>
 		</rule>
 	</rule>
-	
+
 </rendertheme>
