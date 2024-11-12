@@ -329,6 +329,29 @@
                 </xs:documentation>
             </xs:annotation>
         </xs:attribute>
+        <xs:attribute name="force-zoom-range" default="false" type="xs:boolean" use="optional">
+            <xs:annotation>
+                <xs:documentation>Tell advanced hill shading algorithms that support all zoom levels
+                    to respect the zoom range specified here nonetheless. However, algorithm may
+                    decide to use a lower zoom-max in some cases.
+                </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="force-zoom-min" default="false" type="xs:boolean" use="optional">
+            <xs:annotation>
+                <xs:documentation>Tell advanced hill shading algorithms that support all zoom levels
+                    to respect the zoom-min value specified here, and never go below it.
+                </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
+        <xs:attribute name="force-zoom-max" default="false" type="xs:boolean" use="optional">
+            <xs:annotation>
+                <xs:documentation>Tell advanced hill shading algorithms that support all zoom levels
+                    to respect the zoom-max value specified here, and never go above it. However,
+                    algorithm may decide to use a lower zoom-max in some cases.
+                </xs:documentation>
+            </xs:annotation>
+        </xs:attribute>
         <!-- customization unlikely to make any sense -->
         <xs:attribute name="layer" default="5" type="xs:unsignedByte" use="optional" />
     </xs:complexType>

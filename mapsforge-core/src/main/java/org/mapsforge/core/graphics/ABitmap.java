@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 usrusr
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -12,17 +12,14 @@
  * You should have received a copy of the GNU Lesser General Public License along with
  * this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package org.mapsforge.map.layer.hills;
+package org.mapsforge.core.graphics;
 
-import java.util.logging.Logger;
+public abstract class ABitmap implements Bitmap {
 
-/**
- * should implement equals
- */
-public interface DemFolder {
-    Logger LOGGER = Logger.getLogger(AShadingAlgorithm.class.getName());
+   protected final Object mMutex = new Object();
 
-    Iterable<DemFolder> subs();
-
-    Iterable<DemFile> files();
+   @Override
+   public Object getMutex() {
+      return mMutex;
+   }
 }

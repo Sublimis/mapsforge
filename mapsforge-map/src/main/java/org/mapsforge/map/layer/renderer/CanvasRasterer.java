@@ -4,6 +4,7 @@
  * Copyright 2016-2020 devemux86
  * Copyright 2017 usrusr
  * Copyright 2020 Adrian Batzill
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -33,11 +34,13 @@ import java.util.List;
 import java.util.Set;
 
 public class CanvasRasterer {
+    private final RenderContext renderContext;
     private final Canvas canvas;
     private final Path path;
     private final Matrix symbolMatrix;
 
-    public CanvasRasterer(GraphicFactory graphicFactory) {
+    public CanvasRasterer(RenderContext renderContext, GraphicFactory graphicFactory) {
+        this.renderContext = renderContext;
         this.canvas = graphicFactory.createCanvas();
         this.path = graphicFactory.createPath();
         this.symbolMatrix = graphicFactory.createMatrix();
@@ -45,22 +48,6 @@ public class CanvasRasterer {
 
     public void destroy() {
         this.canvas.destroy();
-    }
-
-    void drawWays(RenderContext renderContext) {
-        int levelsPerLayer = renderContext.ways.get(0).size();
-
-        for (int layer = 0, layers = renderContext.ways.size(); layer < layers; ++layer) {
-            List<List<ShapePaintContainer>> shapePaintContainers = renderContext.ways.get(layer);
-
-            for (int level = 0; level < levelsPerLayer; ++level) {
-                List<ShapePaintContainer> wayList = shapePaintContainers.get(level);
-
-                for (int index = wayList.size() - 1; index >= 0; --index) {
-                    drawShapePaintContainer(renderContext, wayList.get(index));
-                }
-            }
-        }
     }
 
     void drawMapElements(Set<MapElementContainer> elements, Tile tile) {
@@ -122,10 +109,15 @@ public class CanvasRasterer {
     }
 
     private void drawHillshading(HillshadingContainer container) {
-        canvas.shadeBitmap(container.bitmap, container.hillsRect, container.tileRect, container.magnitude);
+        final Bitmap bitmap = container.bitmap;
+
+        // Synchronized to prevent concurrent modification by other threads e.g. while merging neighbors
+        synchronized (bitmap.getMutex()) {
+            canvas.shadeBitmap(bitmap, container.hillsRect, container.tileRect, container.magnitude);
+        }
     }
 
-    private void drawPath(RenderContext renderContext, ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
+    private void drawPath(ShapePaintContainer shapePaintContainer, Point[][] coordinates, float dy) {
         this.path.clear();
 
         for (Point[] innerList : coordinates) {
@@ -176,6 +168,7 @@ public class CanvasRasterer {
             // Make sure setting the shader shift and actual drawing is synchronized,
             // since the paint object is shared between multiple threads.
             synchronized (shapePaintContainer.paint) {
+                final RenderContext renderContext = this.renderContext;
                 shapePaintContainer.paint.setBitmapShaderShift(renderContext.rendererJob.tile.getOrigin());
                 this.canvas.drawPath(this.path, shapePaintContainer.paint);
             }
@@ -184,7 +177,7 @@ public class CanvasRasterer {
         }
     }
 
-    private void drawShapePaintContainer(RenderContext renderContext, ShapePaintContainer shapePaintContainer) {
+    public void drawShapePaintContainer(ShapePaintContainer shapePaintContainer) {
         ShapeContainer shapeContainer = shapePaintContainer.shapeContainer;
         ShapeType shapeType = shapeContainer.getShapeType();
         switch (shapeType) {
@@ -197,7 +190,7 @@ public class CanvasRasterer {
                 break;
             case POLYLINE:
                 PolylineContainer polylineContainer = (PolylineContainer) shapeContainer;
-                drawPath(renderContext, shapePaintContainer, polylineContainer.getCoordinatesRelativeToOrigin(), shapePaintContainer.dy);
+                drawPath(shapePaintContainer, polylineContainer.getCoordinatesRelativeToOrigin(), shapePaintContainer.dy);
                 break;
         }
     }
