@@ -4,6 +4,7 @@
  * Copyright 2014-2016 devemux86
  * Copyright 2017 usrusr
  * Copyright 2018 Fabrice Fontaine
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -75,7 +76,7 @@ public class DirectRenderer extends StandardRenderer {
     public TileBitmap executeJob(RendererJob rendererJob) {
         RenderContext renderContext = null;
         try {
-            renderContext = new RenderContext(rendererJob, new CanvasRasterer(graphicFactory));
+            renderContext = new RenderContext(rendererJob, graphicFactory);
 
             if (renderBitmap(renderContext)) {
                 TileBitmap bitmap = null;
@@ -86,14 +87,14 @@ public class DirectRenderer extends StandardRenderer {
                 }
 
                 if (!rendererJob.labelsOnly) {
-                    renderContext.renderTheme.matchHillShadings(this, renderContext);
+                    renderContext.renderTheme.matchHillShadings(renderContext, this.hillsRenderConfig);
                     bitmap = this.graphicFactory.createTileBitmap(rendererJob.tile.tileSize, rendererJob.hasAlpha);
                     bitmap.setTimestamp(rendererJob.mapDataStore.getDataTimestamp(rendererJob.tile));
                     renderContext.canvasRasterer.setCanvasBitmap(bitmap);
                     if (!rendererJob.hasAlpha && rendererJob.displayModel.getBackgroundColor() != renderContext.renderTheme.getMapBackground()) {
                         renderContext.canvasRasterer.fill(renderContext.renderTheme.getMapBackground());
                     }
-                    renderContext.canvasRasterer.drawWays(renderContext);
+                    renderContext.drawWays();
                 }
 
                 if (this.renderLabels) {
@@ -140,7 +141,7 @@ public class DirectRenderer extends StandardRenderer {
             // they already overlap from other tiles. The second one is currentLabels that contains
             // the elements on this tile that do not overlap onto a drawn tile. Now we sort this list and
             // remove those elements that clash in this list already.
-            List<MapElementContainer> currentElementsOrdered = LayerUtil.collisionFreeOrdered(renderContext.labels, Rotation.NULL_ROTATION);
+            List<MapElementContainer> currentElementsOrdered = LayerUtil.collisionFreeOrdered(renderContext.getLabels(), Rotation.NULL_ROTATION);
 
             // now we go through this list, ordered by priority, to see which can be drawn without clashing.
             Iterator<MapElementContainer> currentMapElementsIterator = currentElementsOrdered.iterator();

@@ -19,19 +19,17 @@ package org.mapsforge.map.layer.hills;
 import org.mapsforge.core.graphics.Canvas;
 import org.mapsforge.core.graphics.GraphicFactory;
 import org.mapsforge.core.graphics.HillshadingBitmap;
-import org.mapsforge.core.model.BoundingBox;
+import org.mapsforge.map.layer.hills.HillShadingUtils.BlockingSumLimiter;
 
 import java.io.File;
-import java.lang.ref.WeakReference;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.logging.Level;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,111 +40,32 @@ import java.util.regex.Pattern;
 public class HgtCache {
     private static final Logger LOGGER = Logger.getLogger(HgtCache.class.getName());
 
-    /** No need for this to ever be greater than 1 */
-    public static final int PaddingSizeDefault = 1;
-
     // Should be lower-case
     public static final String ZipFileExtension = "zip";
     public static final String HgtFileExtension = "hgt";
     public static final String DotZipFileExtension = "." + ZipFileExtension;
     public static final String DotHgtFileExtension = "." + HgtFileExtension;
 
-    final DemFolder demFolder;
-    final ShadingAlgorithm algorithm;
-    final boolean interpolatorOverlap;
-    final int mainCacheSize;
+    protected final DemFolder mDemFolder;
+    protected final ShadingAlgorithm mShadingAlgorithm;
+    protected final int mPadding;
 
-    private final GraphicFactory graphicsFactory;
-
-    private final Lru mainLru;
-
-    private final LazyFuture<Map<TileKey, HgtFileInfo>> hgtFiles;
-
-
-    protected static final class TileKey {
-        final int north;
-        final int east;
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o)
-                return true;
-            if (o == null || getClass() != o.getClass())
-                return false;
-
-            TileKey tileKey = (TileKey) o;
-
-            return north == tileKey.north && east == tileKey.east;
-        }
-
-        @Override
-        public int hashCode() {
-            int result = north;
-            result = 31 * result + east;
-            return result;
-        }
-
-        TileKey(int north, int east) {
-            this.east = east;
-            this.north = north;
-        }
-    }
-
-    private static class Lru {
-        protected final int size;
-        protected final LinkedHashSet<Future<HillshadingBitmap>> lru;
-
-        Lru(int size) {
-            this.size = size;
-            lru = size > 0 ? new LinkedHashSet<>() : null;
-        }
-
-        /**
-         * @param freshlyUsed the entry that should be marked as freshly used
-         * @return the evicted entry, which is freshlyUsed if size is 0
-         */
-        Future<HillshadingBitmap> markUsed(Future<HillshadingBitmap> freshlyUsed) {
-            if (size > 0 && freshlyUsed != null) {
-                synchronized (lru) {
-                    lru.remove(freshlyUsed);
-                    lru.add(freshlyUsed);
-                    if (lru.size() > size) {
-                        Iterator<Future<HillshadingBitmap>> iterator = lru.iterator();
-                        Future<HillshadingBitmap> evicted = iterator.next();
-                        iterator.remove();
-                        return evicted;
-                    }
-                    return null;
-                }
-            }
-            return freshlyUsed;
-        }
-
-        void evict(Future<HillshadingBitmap> loadingFuture) {
-            if (size > 0) {
-                synchronized (lru) {
-                    lru.add(loadingFuture);
-                }
-            }
-        }
-
-        public int getSize() {
-            return size;
-        }
-    }
+    protected final GraphicFactory mGraphicsFactory;
+    protected final Lru mLruCache;
+    protected final LazyFuture<Map<TileKey, HgtFileInfo>> mHgtFiles;
+    protected final BlockingSumLimiter mBlockingSumLimiter = new BlockingSumLimiter();
 
     protected final List<String> problems = new ArrayList<>();
 
-    HgtCache(DemFolder demFolder, boolean interpolationOverlap, GraphicFactory graphicsFactory, ShadingAlgorithm algorithm, int mainCacheSize) {
-        this.demFolder = demFolder;
-        this.interpolatorOverlap = interpolationOverlap;
-        this.graphicsFactory = graphicsFactory;
-        this.algorithm = algorithm;
-        this.mainCacheSize = mainCacheSize;
+    public HgtCache(DemFolder demFolder, GraphicFactory graphicsFactory, int padding, ShadingAlgorithm algorithm, int cacheMinCount, int cacheMaxCount, long cacheMaxBytes) {
+        mDemFolder = demFolder;
+        mGraphicsFactory = graphicsFactory;
+        mShadingAlgorithm = algorithm;
+        mPadding = padding;
 
-        mainLru = new Lru(this.mainCacheSize);
+        mLruCache = new Lru(cacheMinCount, cacheMaxCount, cacheMaxBytes);
 
-        hgtFiles = new LazyFuture<Map<TileKey, HgtFileInfo>>() {
+        mHgtFiles = new LazyFuture<Map<TileKey, HgtFileInfo>>() {
             @Override
             protected Map<TileKey, HgtFileInfo> calculate() {
                 final Map<TileKey, HgtFileInfo> map = new HashMap<>();
@@ -154,7 +73,7 @@ public class HgtCache {
                 final Matcher matcher = Pattern
                         .compile(regex, Pattern.CASE_INSENSITIVE)
                         .matcher("");
-                indexFolder(HgtCache.this.demFolder, matcher, map, problems);
+                indexFolder(HgtCache.this.mDemFolder, matcher, map, problems);
                 return map;
             }
 
@@ -180,7 +99,7 @@ public class HgtCache {
 
                     final TileKey tileKey = new TileKey(north, east);
                     final HgtFileInfo existing = map.get(tileKey);
-                    if (existing == null || existing.size < length) {
+                    if (existing == null || existing.mSize < length) {
                         map.put(tileKey, new HgtFileInfo(file, north - 1, east, north, east + 1, length));
                     }
                 }
@@ -195,115 +114,10 @@ public class HgtCache {
                 }
             }
         };
-
     }
 
-    void indexOnThread() {
-        hgtFiles.withRunningThread();
-    }
-
-
-    class LoadUnmergedFuture extends LazyFuture<HillshadingBitmap> {
-        private final HgtFileInfo hgtFileInfo;
-
-        LoadUnmergedFuture(HgtFileInfo hgtFileInfo) {
-            this.hgtFileInfo = hgtFileInfo;
-        }
-
-        public HillshadingBitmap calculate() {
-            final ShadingAlgorithm.RawShadingResult raw = algorithm.transformToByteBuffer(hgtFileInfo, HgtCache.this.interpolatorOverlap ? PaddingSizeDefault : 0);
-
-            return graphicsFactory.createMonoBitmap(raw.width, raw.height, raw.bytes, raw.padding, hgtFileInfo);
-        }
-    }
-
-    public class HgtFileInfo extends BoundingBox implements ShadingAlgorithm.RawHillTileSource {
-        final DemFile file;
-        final Object mWeakRefSync = new Object();
-        WeakReference<Future<HillshadingBitmap>> weakRef = null;
-
-        final long size;
-
-        HgtFileInfo(DemFile file, double minLatitude, double minLongitude, double maxLatitude, double maxLongitude, long size) {
-            super(minLatitude, minLongitude, maxLatitude, maxLongitude);
-            this.file = file;
-            this.size = size;
-        }
-
-        Future<HillshadingBitmap> getBitmapFuture(double pxPerLat, double pxPerLng) {
-            synchronized (mWeakRefSync) {
-                final WeakReference<Future<HillshadingBitmap>> weak = this.weakRef;
-                Future<HillshadingBitmap> candidate = weak == null ? null : weak.get();
-
-                if (candidate == null) {
-                    candidate = new LoadUnmergedFuture(this);
-                    this.weakRef = new WeakReference<>(candidate);
-                }
-
-                mainLru.markUsed(candidate);
-
-                return candidate;
-            }
-        }
-
-        @Override
-        public HillshadingBitmap getFinishedConverted() {
-            synchronized (mWeakRefSync) {
-                WeakReference<Future<HillshadingBitmap>> weak = this.weakRef;
-                if (weak != null) {
-                    Future<HillshadingBitmap> hillshadingBitmapFuture = weak.get();
-                    if (hillshadingBitmapFuture != null && hillshadingBitmapFuture.isDone()) {
-                        try {
-                            return hillshadingBitmapFuture.get();
-                        } catch (InterruptedException | ExecutionException e) {
-//                        e.printStackTrace();
-                            LOGGER.log(Level.WARNING, e.toString());
-                        }
-                    }
-                }
-                return null;
-            }
-        }
-
-        @Override
-        public long getSize() {
-            return size;
-        }
-
-        @Override
-        public DemFile getFile() {
-            return file;
-        }
-
-        @Override
-        public double northLat() {
-            return maxLatitude;
-        }
-
-        @Override
-        public double southLat() {
-            return minLatitude;
-        }
-
-        @Override
-        public double westLng() {
-            return minLongitude;
-        }
-
-        @Override
-        public double eastLng() {
-            return maxLongitude;
-        }
-
-        @Override
-        public String toString() {
-            Future<HillshadingBitmap> future = weakRef == null ? null : weakRef.get();
-            return "[lt:" + minLatitude + "-" + maxLatitude + " ln:" + minLongitude + "-" + maxLongitude + (future == null ? "" : future.isDone() ? "done" : "wip") + "]";
-        }
-    }
-
-    HillshadingBitmap getHillshadingBitmap(int northInt, int eastInt, double pxPerLat, double pxPerLng) throws InterruptedException, ExecutionException {
-        final HgtFileInfo hgtFileInfo = hgtFiles
+    public HillshadingBitmap getHillshadingBitmap(int northInt, int eastInt, int zoomLevel, double pxPerLat, double pxPerLon) throws InterruptedException, ExecutionException {
+        final HgtFileInfo hgtFileInfo = mHgtFiles
                 .get()
                 .get(new TileKey(northInt, eastInt));
 
@@ -311,33 +125,66 @@ public class HgtCache {
             return null;
         }
 
-        Future<HillshadingBitmap> future = hgtFileInfo.getBitmapFuture(pxPerLat, pxPerLng);
-        return future.get();
+        HillshadingBitmap hillshadingBitmap = null;
+
+        final long outputSizeEstimate = mShadingAlgorithm.getOutputSizeBytes(hgtFileInfo, mPadding, zoomLevel, pxPerLat, pxPerLon);
+
+        // Blocking sum limiter is used to prevent cache hammering, and resulting excess memory usage and possible OOM exceptions in extreme situations.
+        // This can happen when many future.get() calls (like the one below) are made concurrently without any limits.
+        mBlockingSumLimiter.add(outputSizeEstimate, mLruCache.mMaxBytes);
+        try {
+            final HgtFileLoadFuture future = hgtFileInfo.getBitmapFuture(HgtCache.this, mShadingAlgorithm, mPadding, zoomLevel, pxPerLat, pxPerLon);
+
+            if (false == future.isDone()) {
+                mLruCache.ensureEnoughSpace(outputSizeEstimate);
+            }
+
+            // This must be called before...
+            hillshadingBitmap = future.get();
+
+            // ...before this.
+            mLruCache.markUsed(future);
+        } finally {
+            mBlockingSumLimiter.subtract(outputSizeEstimate);
+        }
+
+        return hillshadingBitmap;
+    }
+
+    protected HgtFileLoadFuture createHgtFileLoadFuture(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon) {
+        return new HgtFileLoadFuture(hgtFileInfo, padding, zoomLevel, pxPerLat, pxPerLon);
+    }
+
+    public void indexOnThread() {
+        mHgtFiles.withRunningThread();
     }
 
     public static void mergeSameSized(HillshadingBitmap center, HillshadingBitmap neighbor, HillshadingBitmap.Border border, int padding, Canvas copyCanvas) {
-        final HillshadingBitmap sink = center;
         final HillshadingBitmap source = neighbor;
+        final HillshadingBitmap sink = center;
 
-        copyCanvas.setBitmap(sink);
+        // Synchronized to prevent using the bitmap while we write to it (see CanvasRasterer)
+        synchronized (sink.getMutex()) {
+            copyCanvas.setBitmap(sink);
 
-        switch (border) {
-            case WEST:
-                copyCanvas.setClip(0, padding, padding, sink.getHeight() - 2 * padding, true);
-                copyCanvas.drawBitmap(source, -sink.getWidth() + 2 * padding, 0);
-                break;
-            case EAST:
-                copyCanvas.setClip(sink.getWidth() - padding, padding, padding, sink.getHeight() - 2 * padding, true);
-                copyCanvas.drawBitmap(source, sink.getWidth() - 2 * padding, 0);
-                break;
-            case NORTH:
-                copyCanvas.setClip(padding, 0, sink.getWidth() - 2 * padding, padding, true);
-                copyCanvas.drawBitmap(source, 0, -sink.getHeight() + 2 * padding);
-                break;
-            case SOUTH:
-                copyCanvas.setClip(padding, sink.getHeight() - padding, sink.getWidth() - 2 * padding, padding, true);
-                copyCanvas.drawBitmap(source, 0, sink.getHeight() - 2 * padding);
-                break;
+            switch (border) {
+                case WEST:
+                    copyCanvas.setClip(0, padding, padding, sink.getHeight() - 2 * padding, true);
+                    copyCanvas.drawBitmap(source, -sink.getWidth() + 2 * padding, 0);
+                    break;
+                case EAST:
+                    copyCanvas.setClip(sink.getWidth() - padding, padding, padding, sink.getHeight() - 2 * padding, true);
+                    copyCanvas.drawBitmap(source, sink.getWidth() - 2 * padding, 0);
+                    break;
+                case NORTH:
+                    copyCanvas.setClip(padding, 0, sink.getWidth() - 2 * padding, padding, true);
+                    copyCanvas.drawBitmap(source, 0, -sink.getHeight() + 2 * padding);
+                    break;
+                case SOUTH:
+                    copyCanvas.setClip(padding, sink.getHeight() - padding, sink.getWidth() - 2 * padding, padding, true);
+                    copyCanvas.drawBitmap(source, 0, sink.getHeight() - 2 * padding);
+                    break;
+            }
         }
     }
 
@@ -377,68 +224,141 @@ public class HgtCache {
         return isFileNameZip(file.getName());
     }
 
-//    private void logLru(String merged, Lru lru, Future<HillshadingBitmap> ret) {
-//        try {
-//            StringBuilder sb = new StringBuilder();
-//            sb.append(merged).append("\n  LRU: ");
-//            synchronized (lru.lru) {
-//                for (Future<HillshadingBitmap> f : lru.lru){
-//                    sb.append("   E#"+System.identityHashCode(f));
-//                }
-//                sb.append("\n  ");
-//                for(HgtFileInfo hgt : hgtFiles.get().values()){
-//                    WeakReference<Future<HillshadingBitmap>> weakRef = hgt.weakRef;
-//                    if(weakRef!=null){
-//                        Future<HillshadingBitmap> f = weakRef.get();
-//                        if(f!=null){
-//                            sb.append("  ").append(f.getClass().getSimpleName().substring(0,3));
-//                            sb.append("#").append(System.identityHashCode(f));
-//                        }
-//                    }
-//                }
-//            }
-//            System.out.println("\n"+sb+"\n");
-//        }  catch(RuntimeException e){
-//            e.printStackTrace();
-//        } catch (InterruptedException e) {
-//            e.printStackTrace();
-//        } catch (ExecutionException e) {
-//            e.printStackTrace();
-//        }
-//    }
+    protected class HgtFileLoadFuture extends LazyFuture<HillshadingBitmap> {
+        protected final HgtFileInfo mHgtFileInfo;
+        protected final int mPadding;
+        protected final int mZoomLevel;
+        protected final double mPxPerLat, mPxPerLon;
+        protected volatile long mSizeBytes = 0;
 
+        HgtFileLoadFuture(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon) {
+            this.mHgtFileInfo = hgtFileInfo;
+            this.mPadding = padding;
+            this.mZoomLevel = zoomLevel;
+            this.mPxPerLat = pxPerLat;
+            this.mPxPerLon = pxPerLon;
+        }
 
-//    private static void logbytes(HillshadingBitmap fresh, String msg) {
-//        try {
-//            Class<?> superclass = fresh.getClass().getSuperclass();
-//            Field bufferedImage = superclass.getDeclaredField("bufferedImage");
-//            bufferedImage.setAccessible(true);
-//            BufferedImage bi = (BufferedImage) bufferedImage.get(fresh);
-//            Raster data = bi.getData();
-//            StringBuilder sb = new StringBuilder();
-//            for(int y=0;y<data.getHeight();y+=(y==4?data.getHeight()-8:1)) {
-//                if(y==4) {
-//                    sb.append("\n");
-//                    continue;
-//                }
-//                sb.append("\n").append(String.format(" %5d", y)).append(":     ");
-//                for(int x=0;x<data.getWidth();x+=(x==4?data.getWidth()-8:1)) {
-//                    if(x==4) {
-//                        sb.append("   ");
-//                        continue;
-//                    }
-//                    int sample = data.getSample(x, y, 0);
-//                    sb.append(String.format(" %3d", sample));
-//                }
-//
-//            }
-//            System.out.println(msg+" sample: "+fresh.getAreaRect()+sb);
-//
-//        } catch (NoSuchFieldException e) {
-//            e.printStackTrace();
-//        } catch (IllegalAccessException e) {
-//            e.printStackTrace();
-//        }
-//
-//    }
+        public HillshadingBitmap calculate() {
+            HillshadingBitmap output = null;
+
+            final ShadingAlgorithm.RawShadingResult raw = mShadingAlgorithm.transformToByteBuffer(mHgtFileInfo, mPadding, mZoomLevel, mPxPerLat, mPxPerLon);
+
+            if (raw != null) {
+                output = mGraphicsFactory.createMonoBitmap(raw.width, raw.height, raw.bytes, raw.padding, mHgtFileInfo);
+
+                if (output != null) {
+                    mSizeBytes = output.getSizeBytes();
+                } else {
+                    mSizeBytes = 0;
+                }
+            } else {
+                mSizeBytes = 0;
+            }
+
+            return output;
+        }
+
+        public long getCacheTag() {
+            return mShadingAlgorithm.getCacheTag(this.mHgtFileInfo, mPadding, this.mZoomLevel, this.mPxPerLat, this.mPxPerLon);
+        }
+
+        public long getSizeBytes() {
+            return mSizeBytes;
+        }
+    }
+
+    protected static final class TileKey {
+        final int north;
+        final int east;
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o)
+                return true;
+            if (o == null || getClass() != o.getClass())
+                return false;
+
+            TileKey tileKey = (TileKey) o;
+
+            return north == tileKey.north && east == tileKey.east;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = north;
+            result = 31 * result + east;
+            return result;
+        }
+
+        TileKey(int north, int east) {
+            this.east = east;
+            this.north = north;
+        }
+    }
+
+    protected static class Lru {
+        protected final int mMinCount, mMaxCount;
+        protected final long mMaxBytes;
+        protected final Deque<HgtFileLoadFuture> mLruSet = new ArrayDeque<>();
+        protected final AtomicLong mSizeBytes = new AtomicLong(0);
+
+        protected Lru(int minCount, int maxCount, long maxBytes) {
+            mMinCount = minCount;
+            mMaxCount = maxCount;
+            mMaxBytes = maxBytes;
+        }
+
+        /**
+         * Note: The Future should be completed by the time this is called.
+         * This can be ensured by calling this method AFTER at least one call to future.get() elsewhere in the same thread.
+         *
+         * @param freshlyUsed the entry that should be marked as freshly used
+         */
+        public void markUsed(HgtFileLoadFuture freshlyUsed) {
+            if (mMaxBytes > 0 && freshlyUsed != null) {
+
+                final long sizeBytes = freshlyUsed.getSizeBytes();
+
+                synchronized (mLruSet) {
+                    if (mLruSet.remove(freshlyUsed)) {
+                        mSizeBytes.addAndGet(-sizeBytes);
+                    }
+
+                    if (mLruSet.add(freshlyUsed)) {
+                        mSizeBytes.addAndGet(sizeBytes);
+                    }
+                }
+
+                manageSize();
+            }
+        }
+
+        protected void manageSize() {
+            synchronized (mLruSet) {
+                while (mLruSet.size() > mMaxCount || (mLruSet.size() > mMinCount && mSizeBytes.get() > mMaxBytes)) {
+                    removeFirst();
+                }
+            }
+        }
+
+        public void removeFirst() {
+            synchronized (mLruSet) {
+                final HgtFileLoadFuture future = mLruSet.pollFirst();
+
+                if (future != null) {
+                    final long sizeBytes = future.getSizeBytes();
+                    mSizeBytes.addAndGet(-sizeBytes);
+                }
+            }
+        }
+
+        public void ensureEnoughSpace(long bytes) {
+            synchronized (mLruSet) {
+                while (false == mLruSet.isEmpty() && bytes + mSizeBytes.get() > mMaxBytes) {
+                    removeFirst();
+                }
+            }
+        }
+    }
 }

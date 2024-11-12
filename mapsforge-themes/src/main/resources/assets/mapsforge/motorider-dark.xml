@@ -1859,7 +1859,7 @@
             </rule>
         </rule>
 	</rule>
-	
+
 	<!-- entertainment venues LAYER -->
     <rule cat="entertainment" e="any" k="*" v="*" zoom-min="16">
         <rule e="any" k="amenity" v="cinema" zoom-min="16">
