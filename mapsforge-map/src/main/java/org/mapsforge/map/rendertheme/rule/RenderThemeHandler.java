@@ -5,6 +5,7 @@
  * Copyright 2017 usrusr
  * Copyright 2017 MarcelHeckel
  * Copyright 2021 eddiemuc
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -284,6 +285,8 @@ public final class RenderThemeHandler {
                 byte layer = 5;
                 short magnitude = 128;
                 boolean always = false;
+                boolean forceZoomMin = false;
+                boolean forceZoomMax = false;
 
                 for (int i = 0; i < pullParser.getAttributeCount(); ++i) {
                     String name = pullParser.getAttributeName(i);
@@ -301,6 +304,12 @@ public final class RenderThemeHandler {
                             throw new XmlPullParserException("Attribute 'magnitude' must not be > 255");
                     } else if ("always".equals(name)) {
                         always = Boolean.valueOf(value);
+                    } else if ("force-zoom-range".equals(name)) {
+                        forceZoomMin = forceZoomMax = Boolean.valueOf(value);
+                    } else if ("force-zoom-min".equals(name)) {
+                        forceZoomMin = Boolean.valueOf(value);
+                    } else if ("force-zoom-max".equals(name)) {
+                        forceZoomMax = Boolean.valueOf(value);
                     } else if ("layer".equals(name)) {
                         layer = XmlUtils.parseNonNegativeByte("layer", value);
                     }
@@ -312,7 +321,7 @@ public final class RenderThemeHandler {
                 magnitude = HILLSHADING_MAGNITUDE != -1 ? HILLSHADING_MAGNITUDE : magnitude;
 
                 int hillShadingLevel = this.level++;
-                Hillshading hillshading = new Hillshading(minZoom, maxZoom, magnitude, layer, always, hillShadingLevel, this.graphicFactory);
+                Hillshading hillshading = new Hillshading(minZoom, maxZoom, magnitude, layer, always, forceZoomMin, forceZoomMax, hillShadingLevel, this.graphicFactory);
 
                 if (this.categories == null || category == null
                         || this.categories.contains(category)) {
