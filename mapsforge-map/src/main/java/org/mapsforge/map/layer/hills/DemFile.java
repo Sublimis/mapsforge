@@ -21,7 +21,7 @@ import java.io.InputStream;
 import java.util.logging.Logger;
 
 public interface DemFile {
-    Logger LOGGER = Logger.getLogger(AbsShadingAlgorithmDefaults.class.getName());
+    Logger LOGGER = Logger.getLogger(AShadingAlgorithm.class.getName());
 
     String getName();
 

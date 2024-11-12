@@ -15,23 +15,95 @@
  */
 package org.mapsforge.map.layer.hills;
 
-import org.mapsforge.core.graphics.HillshadingBitmap;
-
 public interface ShadingAlgorithm {
 
-    //HillshadingBitmap convertTile(RawHillTileSource source, GraphicFactory graphicFactory);
+    int ZoomLevelMinDefault = 0;
+    int ZoomLevelMaxDefault = Integer.MAX_VALUE;
 
     /**
      * @return Length of a side of a (square) input array minus one (to account for HGT overlap).
      */
-    int getInputAxisLen(HgtCache.HgtFileInfo source);
+    int getInputAxisLen(HgtFileInfo hgtFileInfo);
 
     /**
-     * @return Length of a side of a (square) output array.
+     * @param zoomLevel Zoom level (to determine shading quality requirements)
+     * @param pxPerLat  Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon  Tile pixels per degree of longitude (to determine shading quality requirements)
+     * @return Length of a side of a (square) output array, not including padding.
      */
-    int getOutputAxisLen(HgtCache.HgtFileInfo source);
+    int getOutputAxisLen(HgtFileInfo hgtFileInfo, int zoomLevel, double pxPerLat, double pxPerLon);
 
-    RawShadingResult transformToByteBuffer(HgtCache.HgtFileInfo hgtFileInfo, int padding);
+    /**
+     * @param padding   Padding of the output, useful to minimize border interpolation artifacts (no need to be larger than 1)
+     * @param zoomLevel Zoom level (to determine shading quality requirements)
+     * @param pxPerLat  Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon  Tile pixels per degree of longitude (to determine shading quality requirements)
+     * @return Length of a side of a (square) output array, including padding.
+     */
+    int getOutputWidth(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon);
+
+    /**
+     * @param padding   Padding of the output, useful to minimize border interpolation artifacts (no need to be larger than 1)
+     * @param zoomLevel Zoom level (to determine shading quality requirements)
+     * @param pxPerLat  Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon  Tile pixels per degree of longitude (to determine shading quality requirements)
+     * @return Estimated size of the output array, in bytes, padding included.
+     */
+    long getOutputSizeBytes(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon);
+
+    /**
+     * @param padding   Padding of the output, useful to minimize border interpolation artifacts (no need to be larger than 1)
+     * @param zoomLevel Zoom level (to determine shading quality requirements)
+     * @param pxPerLat  Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon  Tile pixels per degree of longitude (to determine shading quality requirements)
+     */
+    RawShadingResult transformToByteBuffer(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon);
+
+    /**
+     * This is used when deciding whether a cached hill shading tile should be refreshed.
+     *
+     * @param hgtFileInfo HGT file info
+     * @param padding     Padding in the output bitmap
+     * @param zoomLevel   Zoom level (to determine shading quality requirements)
+     * @param pxPerLat    Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon    Tile pixels per degree of longitude (to determine shading quality requirements)
+     * @return Cache tag
+     */
+    default long getCacheTag(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon) {
+        long output = hgtFileInfo.hashCode();
+        output = 31 * output + padding;
+        output = 31 * output + getCacheTagBin(hgtFileInfo, zoomLevel, pxPerLat, pxPerLon);
+
+        return output;
+    }
+
+    /**
+     * Convert the display parameters to a number whose semantics depends on shading algorithm implementation.
+     * This is used in {@link #getCacheTag(HgtFileInfo, int, int, double, double)}.
+     *
+     * @param hgtFileInfo HGT file info
+     * @param zoomLevel   Zoom level intended for the hill shading tile
+     * @param pxPerLat    Tile pixels per degree of latitude (to determine shading quality requirements)
+     * @param pxPerLon    Tile pixels per degree of longitude (to determine shading quality requirements)
+     * @return Converted number
+     */
+    default int getCacheTagBin(HgtFileInfo hgtFileInfo, int zoomLevel, double pxPerLat, double pxPerLon) {
+        return 0;
+    }
+
+    /**
+     * @return Minimum supported zoom level (default is 0).
+     */
+    default int getZoomMin(HgtFileInfo hgtFileInfo) {
+        return ZoomLevelMinDefault;
+    }
+
+    /**
+     * @return Maximum supported zoom level (default is {@link Integer#MAX_VALUE}).
+     */
+    default int getZoomMax(HgtFileInfo hgtFileInfo) {
+        return ZoomLevelMaxDefault;
+    }
 
     class RawShadingResult {
         public final byte[] bytes;
@@ -56,9 +128,6 @@ public interface ShadingAlgorithm {
         long getSize();
 
         DemFile getFile();
-
-        /* for overlap */
-        HillshadingBitmap getFinishedConverted();
 
         /**
          * A ShadingAlgorithm might want to determine the projected dimensions of the tile

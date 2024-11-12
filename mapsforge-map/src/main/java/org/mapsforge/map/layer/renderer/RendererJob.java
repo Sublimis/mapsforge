@@ -23,7 +23,7 @@ import org.mapsforge.map.rendertheme.rule.RenderThemeFuture;
 
 public class RendererJob extends Job {
     public final DisplayModel displayModel;
-    public boolean labelsOnly;
+    public volatile boolean labelsOnly;
     public final MapDataStore mapDataStore;
     public final RenderThemeFuture renderThemeFuture;
     public final float textScale;
