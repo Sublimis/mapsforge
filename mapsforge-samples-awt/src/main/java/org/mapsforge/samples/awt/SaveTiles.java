@@ -42,7 +42,7 @@ public class SaveTiles {
     private static final String HOME = System.getProperty("user.home");
     private static final String SAVE_PATH = "Documents/MyTiles";
 
-    // Your compiled map. 
+    // Your compiled map.
     private static final File DEFAULT_MAP_PATH = new File(HOME + "/osm-data/taiwan-taco.map");
 
     // Location you'd like to render.
@@ -72,7 +72,7 @@ public class SaveTiles {
         TileBasedLabelStore tileBasedLabelStore = new TileBasedLabelStore(tileCache.getCapacityFirstLevel());
 
         // Create renderer.
-        DatabaseRenderer renderer = new DatabaseRenderer(mapData, gf, tileCache, tileBasedLabelStore, true, true, null);
+        DatabaseRenderer renderer = new DatabaseRenderer(mapData, gf, tileCache, tileBasedLabelStore, true, null);
 
         // Create RendererTheme.
         Thread t = new Thread(rtf);

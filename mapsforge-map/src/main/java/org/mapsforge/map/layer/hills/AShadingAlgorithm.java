@@ -22,11 +22,11 @@ import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public abstract class AbsShadingAlgorithmDefaults implements ShadingAlgorithm {
+public abstract class AShadingAlgorithm implements ShadingAlgorithm {
 
     protected final Logger LOGGER = Logger.getLogger(this.getClass().getName());
 
-    protected abstract byte[] convert(InputStream map, int axisLength, int rowLen, int padding, HgtCache.HgtFileInfo source) throws IOException;
+    protected abstract byte[] convert(InputStream map, int axisLength, int rowLen, int padding, int zoomLevel, double pxPerLat, double pxPerLon, HgtFileInfo source) throws IOException;
 
     public short readNext(final InputStream is) throws IOException {
         final int read1 = is.read();
@@ -60,8 +60,8 @@ public abstract class AbsShadingAlgorithmDefaults implements ShadingAlgorithm {
      * {@inheritDoc}
      */
     @Override
-    public int getInputAxisLen(HgtCache.HgtFileInfo source) {
-        long size = source.getSize();
+    public int getInputAxisLen(HgtFileInfo hgtFileInfo) {
+        long size = hgtFileInfo.getSize();
         long elements = size / 2;
         int rowLen = (int) Math.ceil(Math.sqrt(elements));
         if (rowLen * rowLen * 2L != size) {
@@ -74,23 +74,46 @@ public abstract class AbsShadingAlgorithmDefaults implements ShadingAlgorithm {
      * {@inheritDoc}
      */
     @Override
-    public int getOutputAxisLen(HgtCache.HgtFileInfo source) {
-        return getInputAxisLen(source);
+    public int getOutputAxisLen(HgtFileInfo hgtFileInfo, int zoomLevel, double pxPerLat, double pxPerLon) {
+        return getInputAxisLen(hgtFileInfo);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public int getOutputWidth(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon) {
+        return 2 * padding + getOutputAxisLen(hgtFileInfo, zoomLevel, pxPerLat, pxPerLon);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public long getOutputSizeBytes(HgtFileInfo hgtFileInfo, int padding, int zoomLevel, double pxPerLat, double pxPerLon) {
+        final long outputWidth = getOutputWidth(hgtFileInfo, padding, zoomLevel, pxPerLat, pxPerLon);
+
+        return outputWidth * outputWidth;
     }
 
     @Override
-    public RawShadingResult transformToByteBuffer(HgtCache.HgtFileInfo source, int padding) {
-        final int axisLength = getOutputAxisLen(source);
+    public RawShadingResult transformToByteBuffer(HgtFileInfo source, int padding, int zoomLevel, double pxPerLat, double pxPerLon) {
+        RawShadingResult output = null;
+
+        final int axisLength = getOutputAxisLen(source, zoomLevel, pxPerLat, pxPerLon);
         final int rowLen = axisLength + 1;
 
         try {
-            final byte[] bytes = convert(null, axisLength, rowLen, padding, source);
+            final byte[] bytes = convert(null, axisLength, rowLen, padding, zoomLevel, pxPerLat, pxPerLon, source);
 
-            return new RawShadingResult(bytes, axisLength, axisLength, padding);
+            if (bytes != null) {
+                output = new RawShadingResult(bytes, axisLength, axisLength, padding);
+            }
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, e.toString(), e);
-            return null;
         }
+
+        return output;
     }
 
     public double getLatUnitDistance(final double latitude, final long fileAxisLen) {

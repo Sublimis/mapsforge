@@ -1,6 +1,7 @@
 /*
  * Copyright 2010, 2011, 2012, 2013 mapsforge.org
  * Copyright 2014 Ludwig M Brinckmann
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -44,10 +45,10 @@ public class MapFileHeader {
      */
     private static final char SPACE = ' ';
 
-    private MapFileInfo mapFileInfo;
-    private SubFileParameter[] subFileParameters;
-    private byte zoomLevelMaximum;
-    private byte zoomLevelMinimum;
+    private volatile MapFileInfo mapFileInfo;
+    private volatile SubFileParameter[] subFileParameters;
+    private volatile byte zoomLevelMaximum;
+    private volatile byte zoomLevelMinimum;
 
     /**
      * @return a MapFileInfo containing the header data.

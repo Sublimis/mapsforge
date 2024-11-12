@@ -1,6 +1,7 @@
 /*
  * Copyright 2010, 2011, 2012, 2013 mapsforge.org
  * Copyright 2016 devemux86
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -19,9 +20,18 @@ import java.io.IOException;
 import java.io.OutputStream;
 
 public interface Bitmap {
-    void compress(OutputStream outputStream) throws IOException;
+    /**
+     * Can be used to prevent concurrent modification.
+     * On Android this is required.
+     * AWT has a global lock so this is not required (but won't hurt).
+     */
+    Object getMutex();
+
+    void incrementRefCount();
 
     void decrementRefCount();
+
+    boolean isDestroyed();
 
     /**
      * @return the height of this bitmap in pixels.
@@ -33,11 +43,9 @@ public interface Bitmap {
      */
     int getWidth();
 
-    void incrementRefCount();
-
-    boolean isDestroyed();
-
     void scaleTo(int width, int height);
 
     void setBackgroundColor(int color);
+
+    void compress(OutputStream outputStream) throws IOException;
 }

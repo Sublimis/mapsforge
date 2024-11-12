@@ -1,6 +1,7 @@
 /*
  * Copyright 2010, 2011, 2012, 2013 mapsforge.org
  * Copyright 2014-2016 Ludwig M Brinckmann
+ * Copyright 2024 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -107,8 +108,9 @@ public class Tile implements Serializable {
      */
     public final byte zoomLevel;
 
-    private BoundingBox boundingBox;
-    private Point origin;
+    private volatile BoundingBox boundingBox;
+    private volatile Point origin;
+    private final Object mSync = new Object();
 
     /**
      * @param tileX     the X number of the tile.
@@ -169,15 +171,19 @@ public class Tile implements Serializable {
      */
     public BoundingBox getBoundingBox() {
         if (this.boundingBox == null) {
-            double minLatitude = Math.max(MercatorProjection.LATITUDE_MIN, MercatorProjection.tileYToLatitude(tileY + 1, zoomLevel));
-            double minLongitude = Math.max(-180, MercatorProjection.tileXToLongitude(this.tileX, zoomLevel));
-            double maxLatitude = Math.min(MercatorProjection.LATITUDE_MAX, MercatorProjection.tileYToLatitude(this.tileY, zoomLevel));
-            double maxLongitude = Math.min(180, MercatorProjection.tileXToLongitude(tileX + 1, zoomLevel));
-            if (maxLongitude == -180) {
-                // fix for dateline crossing, where the right tile starts at -180 and causes an invalid bbox
-                maxLongitude = 180;
+            synchronized (mSync) {
+                if (this.boundingBox == null) {
+                    double minLatitude = Math.max(MercatorProjection.LATITUDE_MIN, MercatorProjection.tileYToLatitude(tileY + 1, zoomLevel));
+                    double minLongitude = Math.max(-180, MercatorProjection.tileXToLongitude(this.tileX, zoomLevel));
+                    double maxLatitude = Math.min(MercatorProjection.LATITUDE_MAX, MercatorProjection.tileYToLatitude(this.tileY, zoomLevel));
+                    double maxLongitude = Math.min(180, MercatorProjection.tileXToLongitude(tileX + 1, zoomLevel));
+                    if (maxLongitude == -180) {
+                        // fix for dateline crossing, where the right tile starts at -180 and causes an invalid bbox
+                        maxLongitude = 180;
+                    }
+                    this.boundingBox = new BoundingBox(minLatitude, minLongitude, maxLatitude, maxLongitude);
+                }
             }
-            this.boundingBox = new BoundingBox(minLatitude, minLongitude, maxLatitude, maxLongitude);
         }
         return this.boundingBox;
     }
@@ -188,7 +194,7 @@ public class Tile implements Serializable {
      * @return neighbour tiles as a set
      */
     public Set<Tile> getNeighbours() {
-        Set<Tile> neighbours = new HashSet<Tile>(8);
+        Set<Tile> neighbours = new HashSet<>(8);
         neighbours.add(getLeft());
         neighbours.add(getAboveLeft());
         neighbours.add(getAbove());
@@ -226,9 +232,13 @@ public class Tile implements Serializable {
      */
     public Point getOrigin() {
         if (this.origin == null) {
-            double x = MercatorProjection.tileToPixel(this.tileX, this.tileSize);
-            double y = MercatorProjection.tileToPixel(this.tileY, this.tileSize);
-            this.origin = new Point(x, y);
+            synchronized (mSync) {
+                if (this.origin == null) {
+                    double x = MercatorProjection.tileToPixel(this.tileX, this.tileSize);
+                    double y = MercatorProjection.tileToPixel(this.tileY, this.tileSize);
+                    this.origin = new Point(x, y);
+                }
+            }
         }
         return this.origin;
     }

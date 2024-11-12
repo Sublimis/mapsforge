@@ -27,6 +27,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class HillShadingUtils {
 
@@ -343,6 +344,61 @@ public class HillShadingUtils {
             }
 
             return output;
+        }
+    }
+
+    public static class BlockingSumLimiter {
+        protected final AtomicLong mAtomicLong;
+        protected final long mInitialSumValue;
+
+        public BlockingSumLimiter(long initialSumValue) {
+            mAtomicLong = new AtomicLong(initialSumValue);
+            mInitialSumValue = initialSumValue;
+        }
+
+        public BlockingSumLimiter() {
+            this(0);
+        }
+
+        /**
+         * Adds the given value iff the current sum is less than the limit, blocking until this is fulfilled.
+         *
+         * @param valueToAdd Value to add.
+         * @param limit Limit sum.
+         */
+        public void add(final long valueToAdd, final long limit) {
+            synchronized (mAtomicLong) {
+                while (true) {
+                    final long currValue = mAtomicLong.get();
+
+                    if (currValue > limit) {
+                        try {
+                            mAtomicLong.wait();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    } else if (mAtomicLong.compareAndSet(currValue, currValue + valueToAdd)) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        /**
+         * Subtracts the given value ensuring that the sum doesn't go below the initial sum value as provided in the constructor (default: 0).
+         *
+         * @param valueToSubtract Value to subtract.
+         */
+        public void subtract(final long valueToSubtract) {
+            synchronized (mAtomicLong) {
+                mAtomicLong.addAndGet(-valueToSubtract);
+
+                if (mAtomicLong.get() < mInitialSumValue) {
+                    mAtomicLong.set(mInitialSumValue);
+                }
+
+                mAtomicLong.notify();
+            }
         }
     }
 }
