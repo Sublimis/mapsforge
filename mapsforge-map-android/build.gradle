@@ -12,6 +12,10 @@ dependencies {
 publishing {
     publications {
         release(MavenPublication) {
+            groupId = 'org.mapsforge'
+            artifactId = 'org.mapsforge.map.android'
+            version = 'master-SNAPSHOT'
+
             afterEvaluate {
                 from components.release
             }
