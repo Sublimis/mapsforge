@@ -14,7 +14,7 @@ publishing {
         release(MavenPublication) {
             groupId = group()
             artifactId = 'mapsforge-map-android'
-            version = 'master-SNAPSHOT'
+            version = getVersion()
 
             afterEvaluate {
                 from components.release
