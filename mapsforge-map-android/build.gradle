@@ -13,7 +13,7 @@ publishing {
     publications {
         release(MavenPublication) {
             groupId = 'org.mapsforge'
-            artifactId = 'org.mapsforge.map.android'
+            artifactId = 'mapsforge-map-android'
             version = 'master-SNAPSHOT'
 
             afterEvaluate {
