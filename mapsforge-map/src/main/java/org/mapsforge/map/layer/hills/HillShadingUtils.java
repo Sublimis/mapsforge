@@ -163,8 +163,8 @@ public class HillShadingUtils {
         protected volatile ThreadPoolExecutor mThreadPool = null;
 
         public static class MyRejectedExecutionHandler implements RejectedExecutionHandler {
-            public static class MyRejectedException extends Throwable {
-                public MyRejectedException(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
+            public static class MyRejectedThrowable extends Throwable {
+                public MyRejectedThrowable(String message, Throwable cause, boolean enableSuppression, boolean writableStackTrace) {
                     super(message, cause, enableSuppression, writableStackTrace);
                 }
             }
@@ -175,7 +175,7 @@ public class HillShadingUtils {
             }
 
             public void rejectedExecution(Runnable task, ThreadPoolExecutor executor) {
-                throwException(new MyRejectedException("Rejected", null, false, false));
+                throwException(new MyRejectedThrowable("Rejected", null, false, false));
             }
         }
 
@@ -289,7 +289,7 @@ public class HillShadingUtils {
                             retVal = true;
                         }
                     }
-                } catch (Exception ignored) {
+                } catch (Throwable ignored) {
                 }
             }
 
