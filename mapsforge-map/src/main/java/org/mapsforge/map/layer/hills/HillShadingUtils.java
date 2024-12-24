@@ -261,10 +261,26 @@ public class HillShadingUtils {
          *
          * @return {@code this}
          */
-        public HillShadingThreadPool stop() {
+        public HillShadingThreadPool shutdown() {
             synchronized (mSync) {
                 if (mThreadPool != null) {
                     mThreadPool.shutdown();
+                    mThreadPool = null;
+                }
+            }
+
+            return this;
+        }
+
+        /**
+         * Calls {@code ThreadPoolExecutor.shutdownNow()}.
+         *
+         * @return {@code this}
+         */
+        public HillShadingThreadPool shutdownNow() {
+            synchronized (mSync) {
+                if (mThreadPool != null) {
+                    mThreadPool.shutdownNow();
                     mThreadPool = null;
                 }
             }
