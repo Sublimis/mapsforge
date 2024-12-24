@@ -894,7 +894,7 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
      * @see #isDebugTimingSequential()
      */
     protected boolean isDebugTiming() {
-        return true;
+        return false;
     }
 
     /**
