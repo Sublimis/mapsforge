@@ -82,10 +82,19 @@ public final class Samples {
         final HillsRenderConfig hillsConfig;
         File demFolder = getDemFolder(args);
         if (demFolder != null) {
-            MemoryCachingHgtReaderTileSource tileSource = new MemoryCachingHgtReaderTileSource(new DemFolderFS(demFolder), new AdaptiveClasyHillShading(), AwtGraphicFactory.INSTANCE);
+            final AdaptiveClasyHillShading algorithm = new AdaptiveClasyHillShading()
+                    // You can make additional behavior adjustments like so
+                    .setAdaptiveZoomEnabled(true)
+                    .setCustomQualityScale(1);
+
+            MemoryCachingHgtReaderTileSource tileSource = new MemoryCachingHgtReaderTileSource(new DemFolderFS(demFolder), algorithm, AwtGraphicFactory.INSTANCE);
+
             hillsConfig = new HillsRenderConfig(tileSource);
-            hillsConfig.setMagnitudeScaleFactor(1);
-            hillsConfig.setColor(0xff000000);
+
+            // You can override theme values like so:
+            // hillsConfig.setMagnitudeScaleFactor(1);
+            // hillsConfig.setColor(0xff000000);
+
             hillsConfig.indexOnThread();
             args = Arrays.copyOfRange(args, 1, args.length);
         } else {

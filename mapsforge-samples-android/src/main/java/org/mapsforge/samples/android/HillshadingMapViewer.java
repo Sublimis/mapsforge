@@ -84,12 +84,18 @@ public class HillshadingMapViewer extends DefaultTheme {
             alert.show();
         }
         if (anyDems != null) {
-            // minimum setup for hillshading
-            MemoryCachingHgtReaderTileSource hillTileSource = new MemoryCachingHgtReaderTileSource(anyDems, new AdaptiveClasyHillShading(), AndroidGraphicFactory.INSTANCE);
+            final AdaptiveClasyHillShading algorithm = new AdaptiveClasyHillShading()
+                    // You can make additional behavior adjustments like so
+                    .setAdaptiveZoomEnabled(true)
+                    .setCustomQualityScale(1);
+
+            MemoryCachingHgtReaderTileSource hillTileSource = new MemoryCachingHgtReaderTileSource(anyDems, algorithm, AndroidGraphicFactory.INSTANCE);
 
             hillsConfig = new HillsRenderConfig(hillTileSource);
-            hillsConfig.setMagnitudeScaleFactor(1);
-            hillsConfig.setColor(0xff000000);
+
+            // You can override theme values like so:
+            // hillsConfig.setMagnitudeScaleFactor(1);
+            // hillsConfig.setColor(0xff000000);
 
             // call after setting/changing parameters, walks filesystem for DEM metadata
             hillsConfig.indexOnThread();
