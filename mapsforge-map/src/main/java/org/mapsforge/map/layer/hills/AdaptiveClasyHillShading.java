@@ -57,7 +57,7 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
     protected final boolean mIsHqEnabled;
     protected volatile double mCustomQualityScale = 1;
     protected volatile boolean mIsAdaptiveZoomEnabled = IsAdaptiveZoomEnabledDefault;
-    protected volatile int mZoomMin = -1, mZoomMax = -1;
+    protected volatile int mZoomMinOverride = -1, mZoomMaxOverride = -1;
 
     protected final Map<Integer, Map<Long, Integer>> mStrides = new ConcurrentHashMap<>();
 
@@ -134,8 +134,8 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
 
     @Override
     public int getZoomMin(HgtFileInfo hgtFileInfo) {
-        if (mZoomMin >= 0) {
-            return mZoomMin;
+        if (mZoomMinOverride >= 0) {
+            return mZoomMinOverride;
         } else {
             return super.getZoomMin(hgtFileInfo);
         }
@@ -143,8 +143,8 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
 
     @Override
     public int getZoomMax(HgtFileInfo hgtFileInfo) {
-        if (mZoomMax >= 0) {
-            return mZoomMax;
+        if (mZoomMaxOverride >= 0) {
+            return mZoomMaxOverride;
         } else {
             int retVal = ZoomLevelMaxBaseDefault;
 
@@ -169,14 +169,28 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
     }
 
     /**
+     * @return A minimum supported zoom level override. A negative value means the default behavior.
+     */
+    public int getZoomMinOverride() {
+        return mZoomMinOverride;
+    }
+
+    /**
+     * @return A maximum supported zoom level override. A negative value means the default behavior.
+     */
+    public int getZoomMaxOverride() {
+        return mZoomMaxOverride;
+    }
+
+    /**
      * Set a minimum supported zoom level that will override the default behavior where the algorithm decides on the supported
      * zoom levels depending on the input resolution and display parameters.
      *
-     * @param zoomMin A minimum supported zoom level to override the default behavior.
+     * @param zoomMinOverride A minimum supported zoom level to override the default behavior. Set a negative value for the default behavior.
      * @return {@code this}
      */
-    public AdaptiveClasyHillShading setZoomMinOverride(int zoomMin) {
-        mZoomMin = zoomMin;
+    public AdaptiveClasyHillShading setZoomMinOverride(int zoomMinOverride) {
+        mZoomMinOverride = zoomMinOverride;
         return this;
     }
 
@@ -184,11 +198,11 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
      * Set a maximum supported zoom level that will override the default behavior where the algorithm decides on the supported
      * zoom levels depending on the input resolution and display parameters.
      *
-     * @param zoomMax A maximum supported zoom level to override the default behavior.
+     * @param zoomMaxOverride A maximum supported zoom level to override the default behavior. Set a negative value for the default behavior.
      * @return {@code this}
      */
-    public AdaptiveClasyHillShading setZoomMaxOverride(int zoomMax) {
-        mZoomMax = zoomMax;
+    public AdaptiveClasyHillShading setZoomMaxOverride(int zoomMaxOverride) {
+        mZoomMaxOverride = zoomMaxOverride;
         return this;
     }
 

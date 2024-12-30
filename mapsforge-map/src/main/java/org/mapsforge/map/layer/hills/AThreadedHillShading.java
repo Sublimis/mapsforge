@@ -538,11 +538,35 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
         return amplification * 0.5 / (computingParams.mSouthUnitDistancePerLine * line + computingParams.mNorthUnitDistancePerLine * (computingParams.mInputAxisLen - line));
     }
 
+    /**
+     * Compute a stride factor, which tells how many skips there will be while reading the input data.
+     * This is basically {@code inputAxisLen / outputAxisLen}, a ratio that must give a whole number without truncation or rounding,
+     * so {@code outputAxisLen} must be adjusted accordingly.
+     * <p>
+     * Stride factor cannot be less than 1. A value of 1 means no skipping will be performed, i.e. all data will be read and processed.
+     * <p>
+     * If you want {@code outputAxisLen} larger than {@code inputAxisLen} you should use bicubic upscaling.
+     * Please see {@link AdaptiveClasyHillShading#isHqEnabled()} for more info.
+     *
+     * @param inputAxisLen  Width of one line of the input data (without the padding).
+     * @param outputAxisLen Width of one line of the output data (without the padding).
+     * @return Stride factor, basically {@code inputAxisLen / outputAxisLen}. This ratio must give a whole number without truncation or rounding,
+     * so {@code outputAxisLen} must be adjusted accordingly. Stride factor cannot be less than 1.
+     */
     protected int getStrideFactor(int inputAxisLen, int outputAxisLen) {
         return Math.max(1, inputAxisLen / outputAxisLen);
     }
 
+    /**
+     * Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
+     * than to skip without using such a buffer.
+     *
+     * @param inputWidth Width of one line of the input data file (padding included).
+     * @return Buffer size to use when reading the input data file. [bytes]
+     */
     protected int getInputStreamBufferSize(int inputWidth) {
+        // Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
+        // than to skip without using such a buffer.
         return inputWidth * HGT_ELEMENT_SIZE;
     }
 
@@ -551,6 +575,9 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
      * Raw streams can be useful to avoid wasteful buffering when skipping a lot.
      * <p>
      * The default implementation just returns {@code false}, it's up to subclasses to decide if they need different behavior.
+     * <p>
+     * Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
+     * than to skip without using such a buffer.
      *
      * @return {@code true} if a raw stream should be used.
      */
@@ -719,6 +746,8 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
                                 .getFile()
                                 .asRawStream();
                     } else {
+                        // Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
+                        // than to skip without using such a buffer.
                         readStream = hgtFileInfo
                                 .getFile()
                                 .openInputStream(getInputStreamBufferSize(inputWidth));
