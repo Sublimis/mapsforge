@@ -913,7 +913,7 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
      * @see #isDebugTiming()
      */
     protected boolean isDebugTimingSequential() {
-        return false;
+        return true;
     }
 
     protected SilentFutureTask getReadingTask(InputStream readStream, int computingTasksCount, int computingTaskFrom, int computingTaskTo, int linesPerComputeTask, ComputingParams computingParams) {

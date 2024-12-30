@@ -26,10 +26,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * It conserves memory and CPU at lower zoom levels without significant quality degradation, yet it switches to high quality
  * when details are needed at larger zoom levels.
- * Switching to high quality only at larger zoom levels is also a resource-saving tactic, since less hill shading data needs to be processed the more you zoom in.
+ * Switching to high quality only at larger zoom levels is also a resource-saving tactic, since less hill shading data needs to be processed
+ * the more you zoom in.
+ * <p>
+ * You can control the quality/performance of the rendering by setting a custom quality scale value.
+ * Please see {@link #setCustomQualityScale(double)} for more info.
  * <p>
  * This is currently the algorithm of choice, as it provides the best results with excellent performance throughout the zoom level range.
  *
+ * @see #setCustomQualityScale(double)
  * @see StandardClasyHillShading
  * @see HiResClasyHillShading
  * @see HalfResClasyHillShading
@@ -50,8 +55,9 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
     public static final boolean IsAdaptiveZoomEnabledDefault = true;
 
     protected final boolean mIsHqEnabled;
-    protected volatile boolean mIsAdaptiveZoomEnabled = IsAdaptiveZoomEnabledDefault;
     protected volatile double mCustomQualityScale = 1;
+    protected volatile boolean mIsAdaptiveZoomEnabled = IsAdaptiveZoomEnabledDefault;
+    protected volatile int mZoomMin = -1, mZoomMax = -1;
 
     protected final Map<Integer, Map<Long, Integer>> mStrides = new ConcurrentHashMap<>();
 
@@ -128,43 +134,68 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
 
     @Override
     public int getZoomMin(HgtFileInfo hgtFileInfo) {
-        int retVal = ZoomLevelMinDefault;
-
-//        if (isInputFastSkip(hgtFileInfo)) {
-//            retVal = ZoomLevelMinDefault;
-//        } else {
-//            retVal = 7;
-//        }
-
-        return retVal;
+        if (mZoomMin >= 0) {
+            return mZoomMin;
+        } else {
+            return super.getZoomMin(hgtFileInfo);
+        }
     }
 
     @Override
     public int getZoomMax(HgtFileInfo hgtFileInfo) {
-        int retVal = ZoomLevelMaxBaseDefault;
+        if (mZoomMax >= 0) {
+            return mZoomMax;
+        } else {
+            int retVal = ZoomLevelMaxBaseDefault;
 
-        if (false == isHqEnabled()) {
-            retVal -= 1;
-        }
-
-        final int inputAxisLen = getInputAxisLen(hgtFileInfo);
-
-        if (inputAxisLen < HGTFILE_WIDTH_BASE) {
-            for (int len = HGTFILE_WIDTH_BASE; inputAxisLen < len; len /= 2) {
+            if (false == isHqEnabled()) {
                 retVal -= 1;
             }
-        } else if (inputAxisLen > HGTFILE_WIDTH_BASE) {
-            for (int len = HGTFILE_WIDTH_BASE; inputAxisLen > len; len *= 2) {
-                retVal += 1;
-            }
-        }
 
-        return retVal;
+            final int inputAxisLen = getInputAxisLen(hgtFileInfo);
+
+            if (inputAxisLen < HGTFILE_WIDTH_BASE) {
+                for (int len = HGTFILE_WIDTH_BASE; inputAxisLen < len; len /= 2) {
+                    retVal -= 1;
+                }
+            } else if (inputAxisLen > HGTFILE_WIDTH_BASE) {
+                for (int len = HGTFILE_WIDTH_BASE; inputAxisLen > len; len *= 2) {
+                    retVal += 1;
+                }
+            }
+
+            return retVal;
+        }
     }
 
     /**
-     * Lower number means lower quality.
-     * Sometimes this can be useful to improve performance of hill shading on high dpi devices.
+     * Set a minimum supported zoom level that will override the default behavior where the algorithm decides on the supported
+     * zoom levels depending on the input resolution and display parameters.
+     *
+     * @param zoomMin A minimum supported zoom level to override the default behavior.
+     * @return {@code this}
+     */
+    public AdaptiveClasyHillShading setZoomMinOverride(int zoomMin) {
+        mZoomMin = zoomMin;
+        return this;
+    }
+
+    /**
+     * Set a maximum supported zoom level that will override the default behavior where the algorithm decides on the supported
+     * zoom levels depending on the input resolution and display parameters.
+     *
+     * @param zoomMax A maximum supported zoom level to override the default behavior.
+     * @return {@code this}
+     */
+    public AdaptiveClasyHillShading setZoomMaxOverride(int zoomMax) {
+        mZoomMax = zoomMax;
+        return this;
+    }
+
+    /**
+     * A lower value means lower quality.
+     * Sometimes this can be useful to improve the performance of hill shading on high-dpi devices.
+     * See {@link #setCustomQualityScale(double)} for more info.
      *
      * @return A custom quality scale value. The default is 1.
      * @see #setCustomQualityScale(double)
@@ -175,19 +206,19 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
 
     /**
      * Set a new custom quality scale value for hill shading rendering.
-     * Lower number means lower quality.
-     * Sometimes this can be useful to improve performance of hill shading on high dpi devices.
+     * A lower value means lower quality.
+     * Sometimes this can be useful to improve the performance of hill shading on high-dpi devices.
      * <p>
-     * There's usually no reason to set this to a number larger than 1 (the default), even though it's permitted,
-     * as there is no point in having hill shading rendered to a higher resolution than the device screen.
+     * There is usually no reason to set this to a value higher than 1 (the default), although it is allowed,
+     * since it makes no sense to have hill shading rendered at a higher resolution than the device's display.
      * <p>
-     * Let's have an example.
-     * By default, the algorithm will try to match the hill shading resolution to that of the device screen.
-     * If the device screen has 480 dpi and you don't want hill shading to be rendered in a resolution higher than 240 dpi,
+     * Let's take an example.
+     * By default, the algorithm will try to match the hill shading resolution to that of the device's display.
+     * If the device's display is 480 dpi and you don't want the hill shading to be rendered at a resolution higher than 240 dpi,
      * you should set the custom quality scale value to {@code 0.5 = 240 / 480}.
      * <p>
-     * Note: The algorithm tries its best to match the required custom quality scale and resolution, but the result might
-     * not be exact sometimes, as the final hill shading resolution must be a divisor of the input digital elevation data resolution.
+     * Note: The algorithm does its best to match the required custom quality scale and resolution, but the result may sometimes
+     * not be exact because the final resolution of the hill shading must be a divisor of the input DEM/HGT data resolution.
      *
      * @param customQualityScale A new custom quality scale value. The value must be larger than 0, and should not be larger than 1. The default is 1.
      * @return {@code this}
@@ -271,15 +302,11 @@ public class AdaptiveClasyHillShading extends HiResClasyHillShading implements I
         return output;
     }
 
-    protected boolean isInputFastSkip(HgtFileInfo hgtFileInfo) {
-        return hgtFileInfo.getFile() instanceof DemFileFS;
-    }
-
     protected int getStrideAsDivisor(int stride, int inputPxPerDeg) {
         int target = inputPxPerDeg / stride * stride;
 
         while (target != inputPxPerDeg && stride > 1) {
-            // We go down the ladder to get slightly better quality if the exact cannot be achieved
+            // We go down the ladder to get slightly better quality if the exact one cannot be achieved
             --stride;
             target = inputPxPerDeg / stride * stride;
         }

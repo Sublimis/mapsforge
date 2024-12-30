@@ -85,15 +85,17 @@ public class HillshadingMapViewer extends DefaultTheme {
         }
         if (anyDems != null) {
             final AdaptiveClasyHillShading algorithm = new AdaptiveClasyHillShading()
-                    // You can make additional behavior adjustments like so
+                    // You can make additional behavior adjustments
                     .setAdaptiveZoomEnabled(true)
+                    // .setZoomMinOverride(0)
+                    // .setZoomMaxOverride(17)
                     .setCustomQualityScale(1);
 
             MemoryCachingHgtReaderTileSource hillTileSource = new MemoryCachingHgtReaderTileSource(anyDems, algorithm, AndroidGraphicFactory.INSTANCE);
 
             hillsConfig = new HillsRenderConfig(hillTileSource);
 
-            // You can override theme values like so:
+            // You can override theme values:
             // hillsConfig.setMagnitudeScaleFactor(1);
             // hillsConfig.setColor(0xff000000);
 
