@@ -558,15 +558,13 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
     }
 
     /**
-     * Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
-     * than to skip without using such a buffer.
+     * Implementation note: Reading an entire line into a buffer and then performing skips turns out to be faster than directly skipping on an unbuffered (raw) stream.
      *
      * @param inputWidth Width of one line of the input data file (padding included).
      * @return Buffer size to use when reading the input data file. [bytes]
      */
     protected int getInputStreamBufferSize(int inputWidth) {
-        // Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
-        // than to skip without using such a buffer.
+        // Implementation note: Reading an entire line into a buffer and then performing skips turns out to be faster than directly skipping on an unbuffered (raw) stream.
         return inputWidth * HGT_ELEMENT_SIZE;
     }
 
@@ -576,8 +574,7 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
      * <p>
      * The default implementation just returns {@code false}, it's up to subclasses to decide if they need different behavior.
      * <p>
-     * Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
-     * than to skip without using such a buffer.
+     * Implementation note: Reading an entire line into a buffer and then performing skips turns out to be faster than directly skipping on an unbuffered (raw) stream.
      *
      * @return {@code true} if a raw stream should be used.
      */
@@ -746,8 +743,7 @@ public abstract class AThreadedHillShading extends AShadingAlgorithm {
                                 .getFile()
                                 .asRawStream();
                     } else {
-                        // Implementation note: Even when skipping a lot, it turns out that it is faster to read the entire line into a buffer and then perform the skips,
-                        // than to skip without using such a buffer.
+                        // Implementation note: Reading an entire line into a buffer and then performing skips turns out to be faster than directly skipping on an unbuffered (raw) stream.
                         readStream = hgtFileInfo
                                 .getFile()
                                 .openInputStream(getInputStreamBufferSize(inputWidth));
