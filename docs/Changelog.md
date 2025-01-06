@@ -2,6 +2,11 @@
 
 ## Next version
 
+- Minor improvements and bug fixes
+- [Solved issues](https://github.com/mapsforge/mapsforge/issues?q=is%3Aclosed+milestone%3A0.24.0)
+
+## Version 0.23.0 (2025-01-06)
+
 - Map rotation: marker billboard option [#1563](https://github.com/mapsforge/mapsforge/pull/1563)
 - Map label / symbol improvements [#1579](https://github.com/mapsforge/mapsforge/pull/1579) [#1586](https://github.com/mapsforge/mapsforge/pull/1586) [#1588](https://github.com/mapsforge/mapsforge/pull/1588)
 - Adaptive hillshading and improvements
@@ -13,6 +18,8 @@
 - Motorider map theme improvements [#1483](https://github.com/mapsforge/mapsforge/issues/1483)
 - Remove `IMapViewPosition`, use `MapViewPosition` [#1591](https://github.com/mapsforge/mapsforge/pull/1591)
 - Remove `Filter`, use `ThemeCallback` [#1573](https://github.com/mapsforge/mapsforge/pull/1573)
+- Move `MapViewerTemplate` in samples [#1616](https://github.com/mapsforge/mapsforge/pull/1616)
+- Move preferences in samples [#1617](https://github.com/mapsforge/mapsforge/pull/1617)
 - Minor improvements and bug fixes
 - [Solved issues](https://github.com/mapsforge/mapsforge/issues?q=is%3Aclosed+milestone%3A0.23.0)
 
