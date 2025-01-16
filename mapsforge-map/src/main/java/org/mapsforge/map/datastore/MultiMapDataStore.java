@@ -1,7 +1,7 @@
 /*
  * Copyright 2014-2015 Ludwig M Brinckmann
  * Copyright 2015-2022 devemux86
- * Copyright 2024 Sublimis
+ * Copyright 2024-2025 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -154,7 +154,9 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readLabels(tile, false);
             case DEDUPLICATE:
-                return readLabels(tile, true);
+                final MapReadResult mapReadResult = readLabels(tile, true);
+                mapReadResult.deduplicate();
+                return mapReadResult;
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
 
@@ -201,7 +203,9 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readLabels(upperLeft, lowerRight, false);
             case DEDUPLICATE:
-                return readLabels(upperLeft, lowerRight, true);
+                final MapReadResult mapReadResult = readLabels(upperLeft, lowerRight, true);
+                mapReadResult.deduplicate();
+                return mapReadResult;
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
 
@@ -251,7 +255,9 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readMapData(tile, false);
             case DEDUPLICATE:
-                return readMapData(tile, true);
+                final MapReadResult mapReadResult = readMapData(tile, true);
+                mapReadResult.deduplicate();
+                return mapReadResult;
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
     }
@@ -297,7 +303,9 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readMapData(upperLeft, lowerRight, false);
             case DEDUPLICATE:
-                return readMapData(upperLeft, lowerRight, true);
+                final MapReadResult mapReadResult = readMapData(upperLeft, lowerRight, true);
+                mapReadResult.deduplicate();
+                return mapReadResult;
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
     }
