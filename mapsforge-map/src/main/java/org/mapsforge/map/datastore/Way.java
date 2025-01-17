@@ -78,6 +78,11 @@ public class Way implements Comparable<Way> {
             return retVal;
         }
 
+        retVal = Integer.compare(this.latLongs.length, other.latLongs.length);
+        if (retVal != 0) {
+            return retVal;
+        }
+
         retVal = Integer.compare(this.tags.size(), other.tags.size());
         if (retVal != 0) {
             return retVal;
@@ -92,11 +97,6 @@ public class Way implements Comparable<Way> {
             return -1;
         } else if (other.labelPosition != null) {
             return 1;
-        }
-
-        retVal = Integer.compare(this.latLongs.length, other.latLongs.length);
-        if (retVal != 0) {
-            return retVal;
         }
 
         for (int i = 0; i < this.tags.size(); i++) {
