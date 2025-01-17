@@ -53,6 +53,16 @@ public class Way implements Comparable<Way> {
     }
 
     @Override
+    public int hashCode() {
+        return System.identityHashCode(this);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return this == o;
+    }
+
+    @Override
     public int compareTo(Way other) {
         if (this == other) {
             return 0;
@@ -96,20 +106,16 @@ public class Way implements Comparable<Way> {
             }
         }
 
-        {
-            for (int i = 0; i < this.latLongs.length; i++) {
-                retVal = Integer.compare(this.latLongs[i].length, other.latLongs[i].length);
+        for (int i = 0; i < this.latLongs.length; i++) {
+            retVal = Integer.compare(this.latLongs[i].length, other.latLongs[i].length);
+            if (retVal != 0) {
+                return retVal;
+            }
+
+            for (int j = 0; j < this.latLongs[i].length; j++) {
+                retVal = this.latLongs[i][j].compareTo(other.latLongs[i][j]);
                 if (retVal != 0) {
                     return retVal;
-                }
-
-                {
-                    for (int j = 0; j < this.latLongs[i].length; j++) {
-                        retVal = this.latLongs[i][j].compareTo(other.latLongs[i][j]);
-                        if (retVal != 0) {
-                            return retVal;
-                        }
-                    }
                 }
             }
         }
