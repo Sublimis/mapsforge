@@ -154,9 +154,7 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readLabels(tile, false);
             case DEDUPLICATE:
-                final MapReadResult mapReadResult = readLabels(tile, true);
-                mapReadResult.deduplicate();
-                return mapReadResult;
+                return readLabels(tile, true).deduplicate();
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
 
@@ -203,9 +201,7 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readLabels(upperLeft, lowerRight, false);
             case DEDUPLICATE:
-                final MapReadResult mapReadResult = readLabels(upperLeft, lowerRight, true);
-                mapReadResult.deduplicate();
-                return mapReadResult;
+                return readLabels(upperLeft, lowerRight, true).deduplicate();
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
 
@@ -255,9 +251,7 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readMapData(tile, false);
             case DEDUPLICATE:
-                final MapReadResult mapReadResult = readMapData(tile, true);
-                mapReadResult.deduplicate();
-                return mapReadResult;
+                return readMapData(tile, true).deduplicate();
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
     }
@@ -303,9 +297,7 @@ public class MultiMapDataStore extends MapDataStore {
             case RETURN_ALL:
                 return readMapData(upperLeft, lowerRight, false);
             case DEDUPLICATE:
-                final MapReadResult mapReadResult = readMapData(upperLeft, lowerRight, true);
-                mapReadResult.deduplicate();
-                return mapReadResult;
+                return readMapData(upperLeft, lowerRight, true).deduplicate();
         }
         throw new IllegalStateException("Invalid data policy for multi map database");
     }

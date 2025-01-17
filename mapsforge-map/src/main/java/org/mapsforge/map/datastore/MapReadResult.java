@@ -82,7 +82,7 @@ public class MapReadResult {
         this.ways.addAll(other.ways);
     }
 
-    public void deduplicate()
+    public MapReadResult deduplicate()
     {
         if (!this.ways.isEmpty()) {
 
@@ -103,5 +103,7 @@ public class MapReadResult {
                 current = way;
             }
         }
+
+        return this;
     }
 }
