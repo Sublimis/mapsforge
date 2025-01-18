@@ -90,10 +90,10 @@ public class MapFileWithDataTest {
 
             MapReadResult mapReadResult = mapFile.readMapData(tile);
 
-            Assert.assertEquals(1, mapReadResult.pointOfInterests.size());
+            Assert.assertEquals(1, mapReadResult.pois.size());
             Assert.assertEquals(1, mapReadResult.ways.size());
 
-            checkPointOfInterest(mapReadResult.pointOfInterests.get(0));
+            checkPointOfInterest(new ArrayList<>(mapReadResult.pois).get(0));
             checkWay(new ArrayList<>(mapReadResult.ways).get(0));
         }
 

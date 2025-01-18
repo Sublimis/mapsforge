@@ -35,18 +35,18 @@ final class EncodingTest {
         // read all labels data, ways should be empty as in the example the way does not carry a name tag
         MapReadResult mapReadResult = mapFile.readLabels(tile);
         Assert.assertFalse(mapReadResult == null);
-        Assert.assertTrue(mapReadResult.pointOfInterests.isEmpty());
+        Assert.assertTrue(mapReadResult.pois.isEmpty());
         Assert.assertTrue(mapReadResult.ways.isEmpty());
 
         // read only poi data, ways should be empty
         mapReadResult = mapFile.readPoiData(tile);
         Assert.assertFalse(mapReadResult == null);
-        Assert.assertTrue(mapReadResult.pointOfInterests.isEmpty());
+        Assert.assertTrue(mapReadResult.pois.isEmpty());
         Assert.assertTrue(mapReadResult.ways.isEmpty());
 
         mapReadResult = mapFile.readMapData(tile);
 
-        Assert.assertTrue(mapReadResult.pointOfInterests.isEmpty());
+        Assert.assertTrue(mapReadResult.pois.isEmpty());
         Assert.assertEquals(1, mapReadResult.ways.size());
 
         LatLong latLong1 = new LatLong(0.0, 0.0);

@@ -175,7 +175,7 @@ public class MultiMapDataStore extends MapDataStore {
                 }
                 boolean isWater = mapReadResult.isWater & result.isWater;
                 mapReadResult.isWater = isWater;
-                mapReadResult.add(result, deduplicate);
+                mapReadResult.add(result);
             }
 
             if (mdb.supportsFullTile(tile)) {
@@ -225,7 +225,7 @@ public class MultiMapDataStore extends MapDataStore {
                 }
                 boolean isWater = mapReadResult.isWater & result.isWater;
                 mapReadResult.isWater = isWater;
-                mapReadResult.add(result, deduplicate);
+                mapReadResult.add(result);
             }
 
             if (mdb.supportsFullArea(
@@ -271,7 +271,7 @@ public class MultiMapDataStore extends MapDataStore {
                 }
                 boolean isWater = mapReadResult.isWater & result.isWater;
                 mapReadResult.isWater = isWater;
-                mapReadResult.add(result, deduplicate);
+                mapReadResult.add(result);
             }
 
             if (mdb.supportsFullTile(tile)) {
@@ -320,7 +320,7 @@ public class MultiMapDataStore extends MapDataStore {
                 }
                 boolean isWater = mapReadResult.isWater & result.isWater;
                 mapReadResult.isWater = isWater;
-                mapReadResult.add(result, deduplicate);
+                mapReadResult.add(result);
             }
 
             if (mdb.supportsFullArea(
@@ -367,7 +367,7 @@ public class MultiMapDataStore extends MapDataStore {
                 }
                 boolean isWater = mapReadResult.isWater & result.isWater;
                 mapReadResult.isWater = isWater;
-                mapReadResult.add(result, deduplicate);
+                mapReadResult.add(result);
             }
 
             if (mdb.supportsFullTile(tile)) {
@@ -417,7 +417,7 @@ public class MultiMapDataStore extends MapDataStore {
                 }
                 boolean isWater = mapReadResult.isWater & result.isWater;
                 mapReadResult.isWater = isWater;
-                mapReadResult.add(result, deduplicate);
+                mapReadResult.add(result);
             }
 
             if (mdb.supportsFullArea(

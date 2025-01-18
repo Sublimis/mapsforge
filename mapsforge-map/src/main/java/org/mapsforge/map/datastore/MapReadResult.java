@@ -18,8 +18,8 @@
 package org.mapsforge.map.datastore;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -30,19 +30,9 @@ import java.util.Set;
 public class MapReadResult {
 
     /**
-     * Hash codes.
-     */
-    private final Set<Integer> hashPois = new HashSet<>();
-
-    /**
      * True if the read area is completely covered by water, false otherwise.
      */
     public boolean isWater;
-
-    /**
-     * The read POIs.
-     */
-    public List<PointOfInterest> pointOfInterests;
 
     /**
      * The read ways.
@@ -50,60 +40,61 @@ public class MapReadResult {
      */
     public final Set<Way> ways;
 
+    /**
+     * The read POIs.
+     * LinkedHashSet is used to: 1) maintain element order, 2) maximize element removal performance when deduplicating.
+     */
+    public final Set<PointOfInterest> pois;
+
     public MapReadResult() {
-        this.pointOfInterests = new ArrayList<>();
         // LinkedHashSet is used to: 1) maintain element order, 2) maximize element removal performance when deduplicating.
         this.ways = new LinkedHashSet<>();
+        this.pois = new LinkedHashSet<>();
     }
 
     public void add(PoiWayBundle poiWayBundle) {
-        this.pointOfInterests.addAll(poiWayBundle.pois);
         this.ways.addAll(poiWayBundle.ways);
+        this.pois.addAll(poiWayBundle.pois);
     }
 
     /**
      * Adds other MapReadResult by combining pois and ways.
-     * Optionally deduplication can be requested (more expensive).
      *
-     * @param other       the MapReadResult to add to this.
-     * @param deduplicate true if check for duplicates is required.
+     * @param other the MapReadResult to add to this.
      */
-    public void add(MapReadResult other, boolean deduplicate) {
-        if (deduplicate) {
-            for (PointOfInterest poi : other.pointOfInterests) {
-                if (this.hashPois.add(poi.hashCode())) {
-                    this.pointOfInterests.add(poi);
-                }
-            }
-        } else {
-            this.pointOfInterests.addAll(other.pointOfInterests);
-        }
-
+    public void add(MapReadResult other) {
         this.ways.addAll(other.ways);
+        this.pois.addAll(other.pois);
     }
 
-    public MapReadResult deduplicate()
-    {
-        if (!this.ways.isEmpty()) {
+    public MapReadResult deduplicate() {
+        deduplicate(this.ways);
+        deduplicate(this.pois);
 
-            final ArrayList<Way> list = new ArrayList<>(this.ways);
+        return this;
+    }
 
-            Collections.sort(list);
+    public static <T extends Comparable<T>> void deduplicate(Collection<T> collection) {
+        if (!collection.isEmpty()) {
 
-            Way current = list.get(0);
+            final List<T> sorted = new ArrayList<>(collection);
 
-            for (int i = 1; i < list.size(); i++) {
-                Way way = list.get(i);
-                if (current.compareTo(way) == 0) {
-                    // Removing instead of building a new list because the expected number of duplicates is usually (much) less than 50%.
-                    this.ways.remove(way);
+            Collections.sort(sorted);
+
+            T pivot = sorted.get(0);
+
+            for (int i = 1; i < sorted.size(); i++) {
+                T item = sorted.get(i);
+                if (pivot.compareTo(item) == 0) {
+                    // We're removing duplicates instead of building a new list from non-duplicates
+                    // simply because the expected number of duplicates is small (much less than 50%),
+                    // and we made sure the removals are cheap.
+                    collection.remove(item);
                     continue;
                 }
 
-                current = way;
+                pivot = item;
             }
         }
-
-        return this;
     }
 }
