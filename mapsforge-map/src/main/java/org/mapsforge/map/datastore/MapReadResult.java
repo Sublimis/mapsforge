@@ -17,11 +17,9 @@
  */
 package org.mapsforge.map.datastore;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
+import org.mapsforge.core.util.Utils;
+
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -68,33 +66,9 @@ public class MapReadResult {
     }
 
     public MapReadResult deduplicate() {
-        deduplicate(this.ways);
-        deduplicate(this.pois);
+        Utils.deduplicate(this.ways);
+        Utils.deduplicate(this.pois);
 
         return this;
-    }
-
-    public static <T extends Comparable<T>> void deduplicate(Collection<T> collection) {
-        if (!collection.isEmpty()) {
-
-            final List<T> sorted = new ArrayList<>(collection);
-
-            Collections.sort(sorted);
-
-            T pivot = sorted.get(0);
-
-            for (int i = 1; i < sorted.size(); i++) {
-                T item = sorted.get(i);
-                if (pivot.compareTo(item) == 0) {
-                    // We're removing duplicates instead of building a new list from non-duplicates
-                    // simply because the expected number of duplicates is small (much less than 50%),
-                    // and we made sure the removals are cheap.
-                    collection.remove(item);
-                    continue;
-                }
-
-                pivot = item;
-            }
-        }
     }
 }

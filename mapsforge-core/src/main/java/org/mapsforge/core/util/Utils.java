@@ -1,5 +1,6 @@
 /*
  * Copyright 2016 devemux86
+ * Copyright 2025 Sublimis
  *
  * This program is free software: you can redistribute it and/or modify it under the
  * terms of the GNU Lesser General Public License as published by the Free Software
@@ -14,6 +15,9 @@
  */
 package org.mapsforge.core.util;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 
 public final class Utils {
@@ -51,5 +55,43 @@ public final class Utils {
             }
         }
         return false;
+    }
+
+    /**
+     * Deduplicate a collection by first building a sorted list, then removing the duplicates
+     * from the original collection without changing the order of the remaining elements.
+     * <p>
+     * This strategy is efficient for collections with fast removal operations, like
+     * {@link java.util.LinkedHashMap}, and/or for collections containing small fraction of duplicates.
+     *
+     * @param collection A collection with fast removals and/or expected small fraction of duplicates.
+     * @param <T>        A type implementing the {@link Comparable} interface.
+     * @return The original collection without duplicate elements. Order of the remaining elements is not changed.
+     * @author Sublimis
+     */
+    public static <T extends Comparable<T>> Collection<T> deduplicate(Collection<T> collection) {
+        if (!collection.isEmpty()) {
+
+            final List<T> sorted = new ArrayList<>(collection);
+
+            Collections.sort(sorted);
+
+            T pivot = sorted.get(0);
+
+            for (int i = 1; i < sorted.size(); i++) {
+                T item = sorted.get(i);
+                if (pivot.compareTo(item) == 0) {
+                    // We're removing duplicates instead of building a new list from non-duplicates
+                    // simply because the expected number of duplicates is small (much less than 50%),
+                    // and we made sure the removals are cheap.
+                    collection.remove(item);
+                    continue;
+                }
+
+                pivot = item;
+            }
+        }
+
+        return collection;
     }
 }
