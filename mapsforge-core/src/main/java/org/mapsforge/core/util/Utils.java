@@ -61,29 +61,29 @@ public final class Utils {
      * Deduplicate a collection by first building a sorted list, then removing the duplicates
      * from the original collection without changing the order of the remaining elements.
      * <p>
-     * This strategy is efficient for collections with fast removal operations, like
+     * The strategy is efficient for unsorted collections with fast find-and-remove operations, like
      * {@link java.util.LinkedHashMap}, and/or for collections containing small fraction of duplicates.
      *
-     * @param collection A collection with fast removals and/or expected small fraction of duplicates.
+     * @param collection A collection with fast find-and-remove operations and/or expected small fraction of duplicates. {@code null}-s are permitted.
      * @param <T>        A type implementing the {@link Comparable} interface.
      * @return The original collection without duplicate elements. Order of the remaining elements is not changed.
-     * @author Sublimis
      */
     public static <T extends Comparable<T>> Collection<T> deduplicate(Collection<T> collection) {
         if (!collection.isEmpty()) {
 
-            final List<T> sorted = new ArrayList<>(collection);
+            final List<T> sortedList;
+            {
+                sortedList = new ArrayList<>(collection);
+                Collections.sort(sortedList);
+            }
 
-            Collections.sort(sorted);
+            T pivot = sortedList.get(0);
 
-            T pivot = sorted.get(0);
-
-            for (int i = 1; i < sorted.size(); i++) {
-                T item = sorted.get(i);
-                if (pivot.compareTo(item) == 0) {
+            for (int i = 1; i < sortedList.size(); i++) {
+                final T item = sortedList.get(i);
+                if (pivot == item || (pivot != null && pivot.compareTo(item) == 0)) {
                     // We're removing duplicates instead of building a new list from non-duplicates
-                    // simply because the expected number of duplicates is small (much less than 50%),
-                    // and we made sure the removals are cheap.
+                    // because the expected number of duplicates is small and removals are fast.
                     collection.remove(item);
                     continue;
                 }
