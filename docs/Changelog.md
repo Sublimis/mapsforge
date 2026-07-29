@@ -2,6 +2,12 @@
 
 ## Next version
 
+- POI v4: FTS5 prefix queries [#1806](https://github.com/mapsforge/mapsforge/pull/1806)
+- Minor improvements and bug fixes
+- [Solved issues](https://github.com/mapsforge/mapsforge/issues?q=is%3Aclosed+milestone%3A0.30.0)
+
+## Version 0.29.0 (2026-07-24)
+
 - POI: **v4** [#1804](https://github.com/mapsforge/mapsforge/pull/1804)
   - R-Tree spatial search
   - FTS5 full-text search
